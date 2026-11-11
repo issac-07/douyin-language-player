@@ -176,3 +176,61 @@ kbd { border: 1px solid #3b4a32; padding: 2px 5px; border-radius: 3px; font-size
 .export-links { display: flex; gap: 14px; margin: 17px 0; font-size: 10px; color: #b7d69a; }
 .export-links a { text-decoration: underline; text-underline-offset: 4px; padding: 4px 0; }
 @media (max-width: 700px) { .roi-preview { height: 260px; } .subtitle-overlay { font-size: 21px; } .transcript-content { max-height: none; } }
+
+/* Phase 3: the generated language content lives only over the actual video image. */
+.player { position: relative; }
+.subtitle-image-bounds { position: absolute; pointer-events: none; overflow: hidden; }
+.interactive-subtitle-overlay { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: calc(100% - 12px); max-height: calc(100% - 8px); padding: 5px 7px; border-radius: 4px; text-align: center; pointer-events: none; overflow: hidden; line-height: 1.3; }
+.subtitle-word-line { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 2px 5px; white-space: pre-wrap; }
+.subtitle-word { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; padding: 1px 0; color: inherit; font: inherit; background: transparent; border-radius: 2px; pointer-events: auto; max-width: 100%; min-width: 0; line-height: 1.2; }
+.subtitle-word:hover { background: #afdb7738; filter: none !important; }
+.subtitle-word:focus-visible { outline: 2px solid #c8f19c; outline-offset: 2px; background: #354b28; }
+.subtitle-word.pinyin-only, .subtitle-word.pinyin-only:disabled { pointer-events: none; opacity: 1; cursor: default; }
+.word-pinyin { display: block; font-size: var(--pinyin-size); font-weight: 400; color: inherit; opacity: .96; overflow-wrap: anywhere; }
+.word-chinese, .subtitle-punctuation, .subtitle-fallback { font-size: var(--chinese-size); font-weight: 500; font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; overflow-wrap: anywhere; }
+.subtitle-vietnamese { font-size: var(--translation-size); line-height: 1.4; margin-top: 5px; font-weight: 400; overflow-wrap: anywhere; }
+.sentence-controls { display: flex; justify-content: center; gap: 18px; padding: 8px 0 2px; }
+.sentence-controls > button { background: transparent; color: #a8bf96; font-size: 10px; padding: 4px 0; }
+.subtitle-settings-menu { position: absolute; right: 10px; bottom: 94px; z-index: 10; width: 292px; max-width: calc(100% - 20px); max-height: calc(100% - 108px); overflow: auto; background: #182019f5; backdrop-filter: blur(14px); border: 1px solid #61704f; border-radius: 7px; padding: 15px; box-shadow: 0 8px 35px #0007; font-size: 11px; }
+.settings-menu-heading { position: sticky; top: -15px; z-index: 2; background: #182019; padding: 7px 0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.subtitle-settings-menu > label { display: block; margin: 12px 0; color: #d3dfc8; }
+.subtitle-settings-menu select { display: block; width: 100%; margin-top: 7px; padding: 6px; }
+.appearance-slider > span { display: flex; justify-content: space-between; }
+.appearance-slider input { display: block; width: 100%; height: 5px; margin-top: 10px; }
+.appearance-slider output { color: #adca94; font-variant-numeric: tabular-nums; }
+.subtitle-settings-menu > .appearance-toggle, .subtitle-settings-menu > .appearance-color { display: flex; align-items: center; gap: 8px; }
+.appearance-toggle input { accent-color: var(--accent); }
+.appearance-color input { margin-left: auto; width: 34px; height: 25px; padding: 1px; border: 0; background: transparent; }
+.subtitle-settings-menu > p { font-size: 10px; color: #a3b595; line-height: 1.6; }
+.learning-workspace .panel-tabs { gap: 12px; padding: 0 12px; }
+.learning-workspace .panel-tabs > button { font-size: 10px; gap: 5px; }
+.transcript-word { background: transparent; color: #dde9d1; font-size: inherit; padding: 1px 1px; border-radius: 2px; text-align: left; }
+.transcript-word:hover { background: #526b3c; }
+.transcript-translation { font-size: 11px; color: #abbf9d; line-height: 1.6; border-top: 1px solid #3b4b31; margin-top: 12px; padding-top: 8px; }
+.dictionary-details { margin-top: 20px; }
+.dictionary-details > summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: #c3dba9; }
+.dictionary-details > summary > span { font-size: 9px; color: #92a882; }
+.dictionary-details > p, .saved-vocabulary > p { font-size: 12px; color: #abb99e; line-height: 1.8; }
+.dictionary-word { font-family: 'Microsoft YaHei', sans-serif; font-size: 32px; margin: 22px 0 8px; color: #e4eedb; }
+.dictionary-pinyin { color: #b4d492 !important; font-size: 15px !important; margin-top: 0; }
+.dictionary-entry { padding: 13px 0 9px; border-top: 1px solid #36432c; font-size: 12px; overflow-wrap: anywhere; }
+.dictionary-entry > span { color: #b1cb95; }
+.dictionary-entry ul { padding-left: 18px; color: #d5ddcd; line-height: 1.8; margin-bottom: 2px; }
+.dictionary-traditional { margin-left: 12px; color: #8ca27b !important; }
+.sidebar-field { display: block; font-size: 11px; line-height: 1.6; color: #a3b493; margin: 14px 0; }
+.sidebar-field textarea, .sidebar-field select { display: block; margin-top: 6px; width: 100%; padding: 8px; color: #dce9d1; background: #10180e; border: 1px solid #435936; border-radius: 4px; font-family: inherit; font-size: 12px; }
+.sidebar-field textarea { resize: vertical; }
+.dictionary-details form > p { font-size: 11px; line-height: 1.7; color: #bdd6a2; }
+.dictionary-attribution { font-size: 9px !important; margin-top: 24px; color: #93a583 !important; }
+.dictionary-attribution a { text-decoration: underline; text-underline-offset: 3px; }
+.saved-word-card { padding: 16px 12px; border: 1px solid #3b4b2e; border-radius: 6px; margin: 15px 0; background: #1a2318; }
+.saved-word-title { font-size: 22px; color: #d6e7c4; background: transparent; padding: 0; }
+.saved-word-card > p { font-size: 11px; color: #adc793; line-height: 1.6; }
+.learning-workspace:fullscreen { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 12px; height: 100vh; background: #080c08; overflow: auto; align-items: stretch; }
+.learning-workspace:fullscreen > .viewing-column { min-height: 0; display: flex; }
+.learning-workspace:fullscreen > .viewing-column > :not(.player) { display: none; }
+.learning-workspace:fullscreen .player { width: 100%; display: flex; flex-direction: column; }
+.learning-workspace:fullscreen .video-stage { flex: 1; min-height: 0; height: auto; }
+.learning-workspace:fullscreen .learning-panel { min-height: 0; overflow: auto; }
+.learning-workspace:fullscreen .transcript-content { max-height: none; }
+@media (max-width: 700px) { .learning-workspace:fullscreen { grid-template-columns: minmax(0, 1fr); display: block; padding: 0; } .learning-workspace:fullscreen > .viewing-column { height: 75vh; } .learning-workspace:fullscreen .learning-panel { margin-top: 10px; } .sentence-controls { gap: 12px; } .sentence-controls > button { font-size: 9px; } .control-row .volume-slider { display: none; } .dictionary-details { border: 1px solid #3b4c30; border-radius: 5px; padding: 12px; } }

@@ -21,18 +21,20 @@ CAPTIONS = """1
 """
 
 
-def generate(output: Path = DEFAULT_OUTPUT) -> Path:
+def generate(output: Path = DEFAULT_OUTPUT, landscape: bool = False) -> Path:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("FFmpeg is required to generate the test fixture. Add it to PATH.")
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    scene = 'color=c=0x26372c:s=640x360:r=24:d=8' if landscape else 'testsrc2=size=360x640:rate=24:duration=8'
+    font_size = 26 if landscape else 20
     with tempfile.TemporaryDirectory(prefix="dlp-fixture-") as directory:
         Path(directory, "captions.srt").write_text(CAPTIONS, encoding="utf-8")
         subprocess.run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "testsrc2=size=360x640:rate=24:duration=8",
+            "-f", "lavfi", "-i", scene,
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100:duration=8",
-            "-vf", "subtitles=captions.srt:force_style='Fontname=Microsoft YaHei,Fontsize=20,MarginV=35,Outline=2'",
+            "-vf", f"subtitles=captions.srt:force_style='Fontname=Microsoft YaHei,Fontsize={font_size},MarginV=35,Outline=2'",
             "-c:v", "libx264", "-preset", "fast", "-crf", "26", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart", "-shortest", str(output),
         ], cwd=directory, check=True, timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -42,5 +44,6 @@ def generate(output: Path = DEFAULT_OUTPUT) -> Path:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--landscape", action="store_true")
     arguments = parser.parse_args()
-    print(generate(arguments.output))
+    print(generate(arguments.output, arguments.landscape))

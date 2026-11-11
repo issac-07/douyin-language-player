@@ -1,19 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AnalysisJob, ProcessingSettings, SubtitleDocument, SubtitleSegment, Video } from '../types';
+import type { AnalysisJob, DictionaryResult, LearningDocument, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video, WordToken } from '../types';
 import { api } from '../services/api';
 import { formatTime } from '../services/playback';
 import { VideoPlayer } from './VideoPlayer';
 import { ROIEditor } from './ROIEditor';
 import { Transcript } from './Transcript';
 import { Icon } from './Icon';
+import { usePlayerSettings } from '../hooks/usePlayerSettings';
 
 const activeJob = (job: AnalysisJob | null) => Boolean(job && ['pending', 'processing'].includes(job.status));
 
 // App keys this component by video ID. All requests and results also carry that ID.
-export function OCRWorkspace({ video }: { video: Video }) {
+export function OCRWorkspace({ video, appearance }: { video: Video; appearance: ReturnType<typeof usePlayerSettings> }) {
   const [settings, setSettings] = useState<ProcessingSettings | null>(null);
   const [document, setDocument] = useState<SubtitleDocument | null>(null);
   const [job, setJob] = useState<AnalysisJob | null>(null);
+  const [learning, setLearning] = useState<LearningDocument | null>(null);
+  const [languageRetry, setLanguageRetry] = useState(0);
+  const [dictionary, setDictionary] = useState<DictionaryResult | null>(null);
+  const [selection, setSelection] = useState<{ word: string; pinyin: string; nonce: number } | null>(null);
+  const [dictionaryError, setDictionaryError] = useState('');
+  const [vocabulary, setVocabulary] = useState<SavedWord[]>([]);
+  const workspace = useRef<HTMLDivElement>(null);
+  const dictionaryRequest = useRef<AbortController | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,7 +42,8 @@ export function OCRWorkspace({ video }: { video: Video }) {
           setSettings(value); setDocument(result); setJob(latest);
         }
       }).catch((cause) => { if (!controller.signal.aborted) setError(cause.message); });
-    return () => { mounted.current = false; controller.abort(); };
+    api.vocabulary().then((words) => { if (!controller.signal.aborted) setVocabulary(words); }).catch((cause) => { if (!controller.signal.aborted) setError(cause.message); });
+    return () => { mounted.current = false; controller.abort(); dictionaryRequest.current?.abort(); };
   }, [video.id]);
 
   useEffect(() => {
@@ -55,6 +65,35 @@ export function OCRWorkspace({ video }: { video: Video }) {
     timer = setTimeout(poll, 250);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [job?.id, job?.status, video.id]);
+
+  const languageSignature = document?.segments.map((segment) => `${segment.id}:${segment.revision}:${segment.text}`).join('|') ?? '';
+  useEffect(() => {
+    if (!document?.analysis) { setLearning(null); return; }
+    const analysisId = document.analysis.id;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await api.learning(video.id, controller.signal);
+        if (controller.signal.aborted || result.video_id !== video.id || result.analysis_id !== analysisId) return;
+        setLearning(result);
+        if (result.segments.some((segment) => segment.translation.status === 'pending')) timer = setTimeout(poll, 700);
+      } catch (cause) {
+        if (!controller.signal.aborted) setError(`Language processing failed: ${(cause as Error).message}`);
+      }
+    };
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [document?.analysis?.id, languageSignature, video.id, languageRetry]);
+
+  const selectWord = (token: WordToken) => {
+    dictionaryRequest.current?.abort();
+    const controller = new AbortController(); dictionaryRequest.current = controller;
+    setSelection({ word: token.text, pinyin: token.pinyin, nonce: Date.now() }); setDictionary(null); setDictionaryError('');
+    if (appearance.settings.pause_on_word) media.current?.pause();
+    api.dictionary(token.text, controller.signal).then((result) => { if (!controller.signal.aborted && mounted.current) setDictionary(result); })
+      .catch((cause) => { if (!controller.signal.aborted && mounted.current) setDictionaryError(cause.message); });
+  };
 
   const analyze = async (force: boolean) => {
     if (!settings || operation.current) return;
@@ -85,9 +124,9 @@ export function OCRWorkspace({ video }: { video: Video }) {
     if (mounted.current && result.video_id === video.id) setDocument(result);
   };
 
-  return <div className="workspace-grid">
+  return <div className="workspace-grid learning-workspace" ref={workspace}>
     <section className="viewing-column" aria-label="Video workspace">
-      <VideoPlayer video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} />
+      <VideoPlayer video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} learning={learning} settings={appearance.settings} updateSettings={appearance.update} settingsStatus={appearance.status} roi={document?.analysis?.settings.roi ?? settings?.roi} onWord={selectWord} fullscreenTarget={workspace} />
       <div className="video-details"><div><h2 title={video.original_name}>{video.original_name}</h2><p>{video.width} × {video.height} <span>·</span> {formatTime(video.duration)} <span>·</span> {video.video_codec.toUpperCase()} {video.audio_codec && ` / ${video.audio_codec.toUpperCase()}`} <span>·</span> {(video.size_bytes / 1024 / 1024).toFixed(1)} MB</p></div><span className="subtle-tag">Imported locally</span></div>
       {video.codec_warning && <p className="codec-warning" role="status">{video.codec_warning}</p>}
       <details className="processing-panel">
@@ -132,6 +171,13 @@ export function OCRWorkspace({ video }: { video: Video }) {
       </details>
       <details className="keyboard-help"><summary>Keyboard shortcuts</summary><p><kbd>Space</kbd> / <kbd>K</kbd> play or pause <span>·</span> <kbd>←</kbd> <kbd>→</kbd> seek 5 seconds <span>·</span> <kbd>M</kbd> mute <span>·</span> <kbd>F</kbd> fullscreen. Focus the crop rectangle and use arrow keys to move it; Shift moves faster.</p></details>
     </section>
-    <Transcript document={document} currentTime={time} seek={seek} save={saveSegment} remove={removeSegment} />
+    <Transcript document={document} currentTime={time} seek={seek} save={saveSegment} remove={removeSegment}
+      learning={learning} onWord={selectWord} selection={selection} dictionary={dictionary} dictionaryError={dictionaryError}
+      vocabulary={vocabulary} saveWord={async (word, status, notes) => {
+        const saved = await api.saveWord(word, status, notes);
+        if (mounted.current) setVocabulary((words) => [saved, ...words.filter((item) => item.id !== saved.id)]);
+      }} deleteWord={async (id) => { await api.deleteWord(id); if (mounted.current) setVocabulary((words) => words.filter((item) => item.id !== id)); }}
+      saveTranslation={async (segment, text) => { if (document?.analysis) { const result = await api.editTranslation(video.id, document.analysis.id, segment, text); if (mounted.current && result.video_id === video.id) setLearning(result); } }}
+      retryTranslation={async () => { try { const result = await api.retryLearning(video.id); if (mounted.current) { setLearning(result); setLanguageRetry((value) => value + 1); } } catch (cause) { if (mounted.current) setError((cause as Error).message); } }} />
   </div>;
 }

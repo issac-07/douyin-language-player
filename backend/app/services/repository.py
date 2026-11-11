@@ -55,7 +55,12 @@ class Repository:
                     video_id TEXT PRIMARY KEY REFERENCES videos(id),
                     analysis_id TEXT NOT NULL REFERENCES analyses(id)
                 );
-                PRAGMA user_version=2;
+                CREATE TABLE IF NOT EXISTS language_cache (cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS translation_cache (cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS translation_overrides (segment_id TEXT PRIMARY KEY,source_text TEXT NOT NULL,translation TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS vocabulary (word TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS player_settings (id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL);
+                PRAGMA user_version=3;
             """)
 
     def list_videos(self) -> list[Video]:

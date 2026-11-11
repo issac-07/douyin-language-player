@@ -50,11 +50,11 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await expect(rows.nth(1)).toContainText('你在干什么？');
   await expect(rows.nth(2)).toContainText('我不知道发生了什么');
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
-  await expect(page.getByTestId('active-subtitle')).toHaveText('今天我们一起去吃饭');
+  await expect.poll(async () => (await page.getByTestId('interactive-overlay').locator('[data-word-text], .subtitle-punctuation').allTextContents()).join('')).toBe('今天我们一起去吃饭');
   await page.getByRole('slider', { name: 'Seek video' }).fill('2.5');
-  await expect(page.getByTestId('active-subtitle')).toHaveCount(0);
+  await expect(page.getByTestId('interactive-overlay')).toHaveCount(0);
   await page.getByRole('slider', { name: 'Seek video' }).fill('4');
-  await expect(page.getByTestId('active-subtitle')).toHaveText('你在干什么？');
+  await expect.poll(async () => (await page.getByTestId('interactive-overlay').locator('[data-word-text], .subtitle-punctuation').allTextContents()).join('')).toBe('你在干什么？');
 
   await rows.first().getByRole('button', { name: 'Edit subtitle' }).click();
   await page.getByLabel('Subtitle text', { exact: true }).fill('今天我们一起去吃饭！');
@@ -101,7 +101,7 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await rows.last().getByRole('button', { name: 'Delete subtitle' }).click();
   await expect(rows).toHaveCount(2);
   await page.getByRole('slider', { name: 'Seek video' }).fill('4');
-  await expect(page.getByTestId('active-subtitle')).toHaveText('你在干什么？');
+  await expect.poll(async () => (await page.getByTestId('interactive-overlay').locator('[data-word-text], .subtitle-punctuation').allTextContents()).join('')).toBe('你在干什么？');
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'test-results/ocr-workspace.png', fullPage: true });

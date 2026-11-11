@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import type { SubtitleSegment, Video } from '../types';
+import type { LearningDocument, PlayerSettings, ProcessingSettings, SubtitleSegment, Video, WordToken } from '../types';
 import { activeSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from '../services/playback';
 import { Icon } from './Icon';
+import { InteractiveSubtitleOverlay } from './InteractiveSubtitleOverlay';
+import { SubtitleAppearance } from './SubtitleAppearance';
+import { DEFAULT_PLAYER_SETTINGS } from '../hooks/usePlayerSettings';
 
-export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange }: {
+export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget }: {
   video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void;
+  learning?: LearningDocument | null; settings?: PlayerSettings; updateSettings?: (settings: PlayerSettings) => void; settingsStatus?: string;
+  roi?: ProcessingSettings['roi']; onWord?: (token: WordToken) => void; fullscreenTarget?: RefObject<HTMLDivElement | null>;
 }) {
   const ownRef = useRef<HTMLVideoElement>(null);
   const element = mediaRef ?? ownRef;
@@ -17,8 +22,25 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange }: {
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState('');
-  const [showSubtitles, setShowSubtitles] = useState(true);
+  const stage = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const previous = useRef<SubtitleSegment | undefined>(undefined);
+  const seeking = useRef(false);
   const active = activeSubtitle(segments, time);
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    if (stage.current) observer.observe(stage.current);
+    return () => observer.disconnect();
+  }, []);
+  const updateTime = (media: HTMLVideoElement, allowPause = true) => {
+    const value = media.currentTime;
+    if (allowPause && settings.auto_pause && !media.paused && !seeking.current && previous.current && value >= previous.current.end_time && value < previous.current.end_time + 1) {
+      media.pause(); media.currentTime = previous.current.end_time;
+    }
+    previous.current = activeSubtitle(segments, media.currentTime);
+    setTime(media.currentTime); onTimeChange?.(media.currentTime);
+  };
 
   const seek = (value: number) => {
     const media = element.current;
@@ -42,7 +64,7 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange }: {
   const fullscreen = async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else await container.current?.requestFullscreen();
+      else await (fullscreenTarget?.current ?? container.current)?.requestFullscreen();
     } catch { setError('Fullscreen is unavailable in this browser window.'); }
   };
 
@@ -65,21 +87,22 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange }: {
   });
 
   return <div className="player" ref={container}>
-    <div className="video-stage">
+    <div className="video-stage" ref={stage}>
       <video
         ref={element} src={video.media_url} preload="metadata" playsInline aria-label={video.original_name}
         onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); setReady(true); }}
-        onTimeUpdate={(event) => { setTime(event.currentTarget.currentTime); onTimeChange?.(event.currentTarget.currentTime); }}
-        onSeeked={(event) => { setTime(event.currentTarget.currentTime); onTimeChange?.(event.currentTarget.currentTime); }}
+        onTimeUpdate={(event) => updateTime(event.currentTarget)}
+        onSeeking={() => { seeking.current = true; }}
+        onSeeked={(event) => { seeking.current = false; updateTime(event.currentTarget, false); }}
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
         onVolumeChange={(event) => { setVolume(event.currentTarget.volume); setMuted(event.currentTarget.muted); }}
         onError={() => { setReady(false); setError('The browser could not load this video. Reimport if the file is missing; for an unsupported codec, convert a copy to H.264 video and AAC audio (see README).'); }}
         onClick={() => void togglePlay()}
       />
-      {!playing && ready && !error && <button className="center-play" aria-label="Start playback" onClick={() => void togglePlay()}><Icon name="play" size={30} /></button>}
+      {!playing && ready && !error && (!active || !settings.show_all) && <button className="center-play" aria-label="Start playback" onClick={() => void togglePlay()}><Icon name="play" size={30} /></button>}
       {!ready && !error && <span className="loading-media" role="status">Loading video…</span>}
       <span className="video-badge">LOCAL MP4</span>
-      {showSubtitles && active && <div className="subtitle-overlay" data-testid="active-subtitle" lang="zh">{active.text}</div>}
+      {active && <InteractiveSubtitleOverlay key={active.id} active={active} language={learning?.segments.find((item) => item.id === active.id)} settings={settings} roi={roi} width={video.width} height={video.height} stageWidth={stageSize.width} stageHeight={stageSize.height} onWord={onWord} />}
     </div>
     {error && <div className="player-error" role="alert">{error}</div>}
     <div className="playback-controls">
@@ -91,7 +114,8 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange }: {
         <button className="icon-button skip" aria-label="Forward 5 seconds" title="Forward 5 seconds (→)" disabled={!ready} onClick={() => seek(time + 5)}><Icon name="forward" /></button>
         <span className="timecode" aria-live="off">{formatTime(time)} <span>/ {formatTime(duration)}</span></span>
         <div className="control-spacer" />
-        {segments.length > 0 && <button className="icon-button" aria-label="Show extracted subtitles" aria-pressed={showSubtitles} onClick={() => setShowSubtitles(!showSubtitles)}><Icon name="captions" /></button>}
+        {segments.length > 0 && <button className="icon-button" aria-label="Show extracted subtitles" aria-pressed={settings.show_all} onClick={() => updateSettings({ ...settings, show_all: !settings.show_all })}><Icon name="captions" /></button>}
+        <button className="icon-button" aria-label="Subtitle appearance" aria-expanded={appearanceOpen} onClick={() => setAppearanceOpen(!appearanceOpen)}><Icon name="settings" /></button>
         <button className="icon-button" aria-label={muted ? 'Unmute' : 'Mute'} title="Mute (M)" onClick={() => { if (element.current) { element.current.muted = !muted; setMuted(!muted); } }}><Icon name={muted || volume === 0 ? 'mute' : 'volume'} /></button>
         <label className="sr-only" htmlFor="volume">Volume</label>
         <input id="volume" className="volume-slider" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={(event) => {
@@ -103,6 +127,12 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange }: {
         </select>
         <button className="icon-button" aria-label="Fullscreen" title="Fullscreen (F)" onClick={() => void fullscreen()}><Icon name="expand" /></button>
       </div>
+      {segments.length > 0 && <div className="sentence-controls">
+        <button onClick={() => { const index = active ? segments.findIndex((item) => item.id === active.id) : -1; const before = index >= 0 ? segments[Math.max(0, index - 1)] : [...segments].reverse().find((item) => item.start_time < time - .05); if (before) seek(before.start_time); }}>Previous subtitle</button>
+        <button onClick={() => { const current = active ?? [...segments].reverse().find((item) => item.start_time <= time); if (current) { seek(current.start_time); void element.current?.play(); } }}>Replay subtitle</button>
+        <button onClick={() => { const next = segments.find((item) => item.start_time > time + .05); if (next) seek(next.start_time); }}>Next subtitle</button>
+      </div>}
     </div>
+    {appearanceOpen && <SubtitleAppearance settings={settings} update={updateSettings} status={settingsStatus} close={() => setAppearanceOpen(false)} />}
   </div>;
 }

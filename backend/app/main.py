@@ -8,9 +8,11 @@ from starlette.responses import JSONResponse
 
 from app.api.videos import router
 from app.api.analysis import router as analysis_router
+from app.api.learning import router as learning_router
 from app.config import Settings
 from app.services.repository import Repository
 from app.services.analysis_worker import AnalysisWorker
+from app.services.learning import LearningService
 
 
 class LocalUploadGuard:
@@ -60,12 +62,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repository.initialize()
         repository.recover_interrupted_jobs()
         app.state.worker = AnalysisWorker(repository, settings)
+        app.state.learning = LearningService(repository, settings)
         try:
             yield
         finally:
             await asyncio.to_thread(app.state.worker.shutdown)
+            await asyncio.to_thread(app.state.learning.shutdown)
 
-    app = FastAPI(title="Douyin Language Player", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Douyin Language Player", version="0.3.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.repository = repository
     # Small multipart overhead allowance; import_video enforces the exact file limit.
@@ -73,13 +77,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
     app.include_router(router)
     app.include_router(analysis_router)
+    app.include_router(learning_router)
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "phase": 2, "ffprobe_available": shutil.which(settings.ffprobe) is not None,
+        return {"status": "ok", "phase": 3, "ffprobe_available": shutil.which(settings.ffprobe) is not None,
                 "max_upload_bytes": settings.max_upload_bytes,
                 "ocr_available": app.state.worker.availability_error is None,
-                "ocr_error": app.state.worker.availability_error}
+                "ocr_error": app.state.worker.availability_error,
+                "dictionary_available": app.state.learning.dictionary.available,
+                "translation_available": app.state.learning.translator.available}
 
     return app
 

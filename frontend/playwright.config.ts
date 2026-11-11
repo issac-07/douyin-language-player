@@ -11,6 +11,7 @@ export default defineConfig({
   projects: [
     { name: 'phase1', testMatch: '**/player.spec.ts' },
     { name: 'phase2', testMatch: '**/ocr.spec.ts', dependencies: ['phase1'] },
+    { name: 'phase3', testMatch: '**/language.spec.ts', dependencies: ['phase2'] },
   ],
   timeout: 30_000,
   globalSetup: './e2e/setup.ts',

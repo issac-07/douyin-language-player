@@ -4,8 +4,10 @@ import { OCRWorkspace } from './components/OCRWorkspace';
 import { api, uploadVideo } from './services/api';
 import { formatTime } from './services/playback';
 import type { Health, Video } from './types';
+import { usePlayerSettings } from './hooks/usePlayerSettings';
 
 export default function App() {
+  const appearance = usePlayerSettings();
   const [videos, setVideos] = useState<Video[]>([]);
   const [selected, setSelected] = useState<Video | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -24,11 +26,14 @@ export default function App() {
     try {
       const [status, library] = await Promise.all([api.health(), api.videos()]);
       setHealth(status); setVideos(library);
-      setSelected((current) => library.find((video) => video.id === current?.id) ?? library[0] ?? null);
+      let remembered: string | null = null;
+      try { remembered = localStorage.getItem('dlp-last-video'); } catch { /* Browser storage can be disabled. */ }
+      setSelected((current) => library.find((video) => video.id === current?.id) ?? library.find((video) => video.id === remembered) ?? library[0] ?? null);
     } catch (cause) { setError((cause as Error).message); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => { if (selected) { try { localStorage.setItem('dlp-last-video', selected.id); } catch { /* Library still works without browser storage. */ } } }, [selected?.id]);
 
   const importFile = async (file?: File) => {
     if (!file || uploadLock.current) return;
@@ -64,7 +69,7 @@ export default function App() {
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">PHASE 02 <span>·</span> CHINESE SUBTITLES</span></header>
+      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">PHASE 03 <span>·</span> WATCH & LEARN</span></header>
       <main>
         <div className="page-heading"><div><div className="eyebrow">A LITTLE EVERY DAY</div><h1>Your next conversation<br className="mobile-break" /> starts here.</h1><p>Watch at your own pace. Make room for the words.</p></div><button className="secondary-button heading-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import video</button></div>
 
@@ -74,7 +79,7 @@ export default function App() {
         {health && !health.ffprobe_available && <div className="alert error" role="alert">FFprobe is missing. Add FFmpeg to PATH and restart the backend before importing.</div>}
         {uploading && <div className="upload-progress" role="status"><span>{progress < 100 ? `Uploading your video · ${progress}%` : 'Upload received · inspecting the MP4…'}</span><progress max="100" value={progress} /></div>}
 
-        {selected ? <OCRWorkspace key={selected.id} video={selected} /> : <div className="workspace-grid">
+        {selected ? <OCRWorkspace key={selected.id} video={selected} appearance={appearance} /> : <div className="workspace-grid">
           <section className="viewing-column" aria-label="Video workspace">
             <div className={`empty-player ${dragging ? 'dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void importFile(event.dataTransfer.files[0]); }}>
               <div className="empty-art" aria-hidden="true"><div className="art-frame back-frame" /><div className="art-frame"><span>字</span><div className="art-lines"><i /><i /><i /></div><div className="art-play"><Icon name="play" size={23} /></div></div><span className="art-spark">✦</span></div>
@@ -87,12 +92,12 @@ export default function App() {
             <div className="panel-tabs" role="tablist" aria-label="Learning panel"><button id="transcript-tab" role="tab" aria-controls="learning-content" aria-selected={tab === 'transcript'} onClick={() => setTab('transcript')}><Icon name="captions" size={17} /> Transcript</button><button id="vocabulary-tab" role="tab" aria-controls="learning-content" aria-selected={tab === 'vocabulary'} onClick={() => setTab('vocabulary')}><Icon name="book" size={17} /> Vocabulary</button></div>
             <div id="learning-content" role="tabpanel" aria-labelledby={`${tab}-tab`} className="panel-content">
               <span className="panel-counter">{tab === 'transcript' ? 'SUBTITLES' : 'SAVED WORDS'}<span>—</span></span>
-              <div className="learning-empty"><span className="empty-tool-icon"><Icon name={tab === 'transcript' ? 'captions' : 'book'} size={28} /></span><h3>{tab === 'transcript' ? 'Every sentence, a small step.' : 'Build your own wordbook.'}</h3><p>{tab === 'transcript' ? 'Import a video, choose its Chinese subtitle region, and analyze it to create your transcript.' : 'Dictionary lookup and saved vocabulary arrive with the language-learning features in Phase 3.'}</p></div>
+              <div className="learning-empty"><span className="empty-tool-icon"><Icon name={tab === 'transcript' ? 'captions' : 'book'} size={28} /></span><h3>{tab === 'transcript' ? 'Every sentence, a small step.' : 'Build your own wordbook.'}</h3><p>{tab === 'transcript' ? 'Import a video, choose its Chinese subtitle region, and analyze it to create your transcript.' : 'Import and analyze a video, then select Chinese words to view definitions and save vocabulary.'}</p></div>
             </div>
             <div className="panel-footnote"><span className="status-dot" />{selected ? 'Video ready for local playback' : 'Import a video to begin'}</div>
           </aside>
         </div>}
-        <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video and Chinese OCR. Language tools next.</span></footer>
+        <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video · Chinese OCR · Mandarin & Vietnamese</span></footer>
       </main>
     </div>
   </div>;

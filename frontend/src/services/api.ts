@@ -1,4 +1,4 @@
-import type { AnalysisJob, Health, ProcessingSettings, SubtitleDocument, SubtitleSegment, Video } from '../types';
+import type { AnalysisJob, DictionaryResult, Health, LearningDocument, PlayerSettings, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video } from '../types';
 
 export function errorMessage(body: unknown): string {
   if (body && typeof body === 'object' && 'detail' in body) {
@@ -18,6 +18,17 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  learning: (id: string, signal?: AbortSignal) => request<LearningDocument>(`/api/videos/${id}/learning`, { signal }),
+  retryLearning: (id: string) => request<LearningDocument>(`/api/videos/${id}/learning/retry`, { method: 'POST' }),
+  dictionary: (word: string, signal?: AbortSignal) => request<DictionaryResult>(`/api/dictionary?word=${encodeURIComponent(word)}`, { signal }),
+  vocabulary: () => request<SavedWord[]>('/api/vocabulary'),
+  saveWord: (word: string, status: SavedWord['status'], notes: string) => request<SavedWord>('/api/vocabulary', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ word, status, notes }) }),
+  deleteWord: async (id: string) => { const response = await fetch(`/api/vocabulary/${id}`, { method: 'DELETE' }); if (!response.ok) throw new Error(errorMessage(await response.json())); },
+  playerSettings: () => request<PlayerSettings>('/api/player-settings'),
+  savePlayerSettings: (settings: PlayerSettings) => request<PlayerSettings>('/api/player-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }),
+  editTranslation: (videoId: string, analysisId: string, segment: SubtitleSegment, translation: string) => request<LearningDocument>(`/api/videos/${videoId}/subtitles/${segment.id}/translation`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analysis_id: analysisId, revision: segment.revision, source_text: segment.text, translation }),
+  }),
   health: () => request<Health>('/api/health'),
   videos: () => request<Video[]>('/api/videos'),
   settings: (id: string) => request<ProcessingSettings>(`/api/videos/${id}/processing-settings`),

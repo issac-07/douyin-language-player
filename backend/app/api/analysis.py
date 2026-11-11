@@ -1,4 +1,5 @@
 from typing import Literal
+import json
 from uuid import UUID
 
 import cv2
@@ -84,6 +85,7 @@ def edit_subtitle(request: Request, video_id: UUID, segment_id: UUID, body: Subt
         raise HTTPException(422, str(exc)) from exc
     if not changed:
         raise HTTPException(409, "This transcript changed during editing. Reload before saving again.")
+    request.app.state.learning.document(repo.document(video_id))
     return repo.document(video_id)
 
 
@@ -111,7 +113,9 @@ def export_subtitles(request: Request, video_id: UUID, format: Literal["json", "
     if not document.analysis:
         raise HTTPException(404, "No completed analysis is available to export.")
     if format == "json":
-        content = document.model_dump_json(indent=2)
+        payload = document.model_dump(mode='json')
+        payload['language'] = request.app.state.learning.document(document).model_dump(mode='json')
+        content = json.dumps(payload, ensure_ascii=False, indent=2)
         media_type = "application/json"
     else:
         content = "\n\n".join(f"{index}\n{srt_time(segment.start_time)} --> {srt_time(segment.end_time)}\n{segment.text}" for index, segment in enumerate(document.segments, 1))

@@ -841,3 +841,188 @@ Preserve the original video and audio. Do not require the user to view extracted
 For the first version, no login or account system is required. Store data locally.
 
 Design the application so that a future Chrome Extension can use the same OCR and language-processing modules to annotate Douyin videos directly in the browser.
+
+
+# CRITICAL PHASE 3 UI SPECIFICATION — In-Video Interactive Subtitles
+
+This specification overrides all previous instructions that place the main interactive subtitles below the video.
+
+I want a Miteiru-inspired player with subtitle positioning similar to YouTube.
+
+Inspect the existing implementation in:
+
+- `frontend/src/components/VideoPlayer.tsx`
+- `frontend/src/components/OCRWorkspace.tsx`
+- `frontend/src/components/Transcript.tsx`
+- `frontend/src/styles.css`
+
+Reuse the existing Phase 2 subtitle overlay, OCR timestamps, video controls, and sidebar layout.
+
+## 1. Interactive Subtitles Must Appear Inside the Video
+
+Render the language-learning subtitles as an HTML overlay on top of the video image.
+
+The overlay must contain:
+
+1. Pinyin above each segmented Chinese word.
+2. Clickable Chinese words.
+3. Vietnamese sentence translation beneath the Chinese words.
+
+The overlay must remain synchronized with the current subtitle using video.currentTime.
+
+Do NOT create a separate subtitle shelf beneath the video player.
+
+Do NOT permanently burn the new subtitles into the source MP4.
+
+The original video must remain unchanged.
+
+## 2. Position Above Existing Hardcoded Subtitles
+
+Douyin videos frequently contain Chinese subtitles already embedded near the bottom.
+
+The default position of the interactive overlay should be just ABOVE the original hardcoded subtitle region.
+
+Use the subtitle OCR ROI metadata as a positioning hint, mapping normalized video coordinates to the actually displayed video rectangle.
+
+Respect object-fit: contain, letterboxing, portrait videos, fullscreen mode and responsive resizing.
+
+Do not assume the source video fills the entire video-stage container.
+
+Prevent subtitle overlap with the video controls.
+
+Allow manual adjustment of vertical and horizontal positioning.
+
+## 3. YouTube-Style Subtitle Customization
+
+Implement a subtitle appearance settings menu with:
+
+- Font size slider
+- Pinyin font size slider
+- Vietnamese translation font size slider
+- Subtitle vertical position slider
+- Optional horizontal position adjustment
+- Background opacity control
+- Text color
+- Text shadow or outline
+- Show/hide pinyin
+- Show/hide Chinese
+- Show/hide Vietnamese
+- Show/hide all generated subtitles
+
+Save these settings persistently.
+
+Defaults should be readable but visually compact.
+
+Provide a Reset to Defaults button.
+
+Settings must work in normal and fullscreen playback.
+
+## 4. Two Subtitle Display Modes
+
+### Interactive Mode (Default)
+
+Display:
+
+Pinyin
+Clickable Chinese words
+Vietnamese sentence translation
+
+All three lines appear inside the video image, preferably just above the original hardcoded subtitles.
+
+Clicking a Chinese word must open or update a dictionary sidebar on the right.
+
+### Minimal Mode
+
+Display:
+
+Pinyin
+Vietnamese sentence translation
+
+Hide the generated Chinese line to avoid excessive duplication of the hardcoded subtitle.
+
+In Minimal Mode, vocabulary can still be selected from the transcript/sidebar.
+
+Do not claim the original hardcoded Chinese text is clickable, because it is part of the video pixels.
+
+## 5. Dictionary Interaction
+
+Dictionary information must NEVER open as a large modal over the video.
+
+Use the existing right-side panel for dictionary lookup.
+
+When a Chinese word is clicked:
+
+- Update the dictionary panel.
+- Show Chinese characters, pinyin, meanings, and Save Vocabulary.
+- Do not pause playback unless explicitly enabled.
+- Do not resize the video or move the subtitle overlay.
+- Do not create multiple dictionary windows.
+
+The user must be able to watch the video normally while consulting the dictionary.
+
+On narrow screens, place dictionary details in a collapsible panel below the video, not over the video.
+
+## 6. Pointer Events
+
+The existing `.subtitle-overlay` uses `pointer-events: none`.
+
+Refactor this carefully:
+
+- Non-interactive overlay regions must allow normal video interaction.
+- Individual Chinese word buttons must receive pointer and keyboard interactions.
+- Clicking a word must not trigger play/pause or unintended seeking.
+- Maintain visible focus states and keyboard accessibility.
+- Avoid large invisible hitboxes blocking the video.
+
+Use a reusable React component such as `InteractiveSubtitleOverlay`.
+
+## 7. Responsiveness and Fullscreen
+
+The subtitle overlay must scale appropriately for:
+
+- Portrait Douyin videos
+- Landscape videos
+- Small browser windows
+- Large monitors
+- Fullscreen mode
+
+Keep all subtitle text inside the actual displayed video bounds.
+
+Support long Chinese sentences through appropriate wrapping.
+
+Keep the dictionary sidebar outside the video image.
+
+## 8. Required Tests
+
+Implement browser tests for:
+
+1. Subtitles rendered inside the video-stage element.
+2. Subtitle positioning above the original subtitle ROI.
+3. Configurable subtitle font sizes.
+4. Persistent appearance settings.
+5. Clicking a Chinese word.
+6. Dictionary details appearing in the right sidebar.
+7. No dictionary modal covering the video.
+8. Video continuing to play after vocabulary selection.
+9. Portrait and landscape video layouts.
+10. Fullscreen subtitle rendering.
+11. Interactive and Minimal modes.
+12. Accurate subtitle synchronization after seeking.
+
+## 9. Acceptance Criteria
+
+Phase 3 is complete only when I can watch a Chinese-subtitled MP4 with:
+
+- Pinyin, Chinese, and Vietnamese inside the video.
+- Adjustable subtitle size and position.
+- Clickable Chinese words.
+- Dictionary information appearing to the right.
+- No large popups obstructing playback.
+- Persistent settings.
+- Real OCR-generated subtitle data and real language-processing results.
+
+Do not replace working Phase 1 or Phase 2 functionality.
+
+Do not implement a static UI mockup.
+
+Build and verify these features in the existing React application.

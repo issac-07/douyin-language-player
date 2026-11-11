@@ -5,18 +5,20 @@ import { containRect, updateROI, type DragMode, type Point, type ROI } from '../
 export function ROIEditor({ video, roi, onChange, timestamp }: { video: Video; roi: ROI; onChange: (roi: ROI) => void; timestamp: number }) {
   const host = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState({ left: 0, top: 0, width: 0, height: 0 });
-  const [error, setError] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const source = `/api/videos/${video.id}/preview?timestamp=${timestamp.toFixed(3)}`;
+  const [errorSource, setErrorSource] = useState('');
+  const [loadedSource, setLoadedSource] = useState('');
+  const error = errorSource === source;
+  const loaded = loadedSource === source;
   const drag = useRef<{ origin: Point; initial: ROI; mode: DragMode } | null>(null);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => setRect(containRect(entry.contentRect.width, entry.contentRect.height, video.width, video.height)));
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, [video.width, video.height]);
-  useEffect(() => { setLoaded(false); setError(false); }, [timestamp, video.id]);
 
   return <div className="roi-preview" ref={host}>
-    <img src={`/api/videos/${video.id}/preview?timestamp=${timestamp.toFixed(3)}`} alt="Video frame for selecting the Chinese subtitle region" draggable={false} onLoad={() => { setLoaded(true); setError(false); }} onError={() => { setError(true); setLoaded(false); }} />
+    <img key={source} src={source} alt="Video frame for selecting the Chinese subtitle region" draggable={false} onLoad={() => { setLoadedSource(source); setErrorSource(''); }} onError={() => setErrorSource(source)} />
     {error && <p className="roi-preview-error" role="alert">Could not load this preview. Choose an earlier time or reimport the video.</p>}
     {!loaded && !error && <p className="roi-preview-error" role="status">Loading preview frame…</p>}
     {loaded && <div className="roi-canvas" data-testid="roi-canvas" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
