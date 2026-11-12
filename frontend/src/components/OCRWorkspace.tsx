@@ -26,12 +26,29 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [capabilities, setCapabilities] = useState<{openvino_cpu: boolean; intel_gpu: boolean} | null>(null);
+  useEffect(() => { const c = new AbortController(); api.ocrCapabilities().then(value => { if (!c.signal.aborted) setCapabilities(value); }).catch(() => {}); return () => c.abort(); }, []);
+  const presetCompatible = settings?.performance?.backend === 'auto' && settings.performance.cpu_runtime === 'ort' && settings.performance.cpu_threads === 4 && (settings.performance.gpu_requests ?? 1) === 1;
+  const preset = !presetCompatible ? 'custom' : settings?.sample_fps === 1 && settings.performance?.mode === 'balanced' && !settings.performance?.refine_timing ? 'speed' : settings?.sample_fps === 2 && settings.performance?.mode === 'balanced' && !settings.performance?.refine_timing ? 'balanced' : settings?.sample_fps === 5 && settings.performance?.refine_timing && settings.performance?.mode === 'balanced' ? 'timing' : 'custom';
+
   const [time, setTime] = useState(0);
   const [previewTime, setPreviewTime] = useState(Math.min(1, video.duration / 2));
   const media = useRef<HTMLVideoElement>(null);
   const mounted = useRef(true);
   const operation = useRef(false);
+  const currentLanguage = useRef(appearance.settings.sentence_language ?? "vi");
+  currentLanguage.current = appearance.settings.sentence_language ?? "vi";
   const running = activeJob(job);
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setClock(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [running]);
+  const elapsed = running && job?.started_at ? Math.max(job.metrics.total_seconds, (clock - Date.parse(job.started_at)) / 1000) : job?.metrics.total_seconds ?? 0;
+  const stages: Record<string, string> = { queued: 'Queued', initializing: 'Preparing OCR model', reading_and_ocr: 'Reading video / OCR', refining: 'Refining subtitle timing', saving: 'Saving subtitles', completed: 'Subtitles saved' };
+
 
   useEffect(() => {
     mounted.current = true;
@@ -74,8 +91,8 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const result = await api.learning(video.id, controller.signal);
-        if (controller.signal.aborted || result.video_id !== video.id || result.analysis_id !== analysisId) return;
+        const result = await api.learning(video.id, controller.signal, appearance.settings.sentence_language ?? "vi");
+        if (controller.signal.aborted || result.video_id !== video.id || result.analysis_id !== analysisId || result.target_language !== currentLanguage.current) return;
         setLearning(result);
         if (result.segments.some((segment) => segment.translation.status === 'pending')) timer = setTimeout(poll, 700);
       } catch (cause) {
@@ -84,16 +101,33 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
     };
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [document?.analysis?.id, languageSignature, video.id, languageRetry]);
+  }, [document?.analysis?.id, languageSignature, video.id, languageRetry, appearance.settings.sentence_language]);
 
   const selectWord = (token: WordToken) => {
     dictionaryRequest.current?.abort();
     const controller = new AbortController(); dictionaryRequest.current = controller;
     setSelection({ word: token.text, pinyin: token.pinyin, nonce: Date.now() }); setDictionary(null); setDictionaryError('');
     if (appearance.settings.pause_on_word) media.current?.pause();
-    api.dictionary(token.text, controller.signal).then((result) => { if (!controller.signal.aborted && mounted.current) setDictionary(result); })
-      .catch((cause) => { if (!controller.signal.aborted && mounted.current) setDictionaryError(cause.message); });
+
   };
+
+  useEffect(() => {
+    if (!selection) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    dictionaryRequest.current?.abort();
+    dictionaryRequest.current = controller;
+    const poll = async () => {
+      try {
+        const result = await api.dictionary(selection.word, controller.signal, appearance.settings.dictionary_language ?? 'en');
+        if (controller.signal.aborted) return;
+        setDictionary(result);
+        if (result.translation?.status === 'pending') timer = setTimeout(poll, 750);
+      } catch (e) { if (!controller.signal.aborted) setDictionaryError((e as Error).message); }
+    };
+    setDictionary(null); setDictionaryError(''); void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [selection?.nonce, appearance.settings.dictionary_language]);
 
   const analyze = async (force: boolean) => {
     if (!settings || operation.current) return;
@@ -126,6 +160,10 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
 
   return <div className="workspace-grid learning-workspace" ref={workspace}>
     <section className="viewing-column" aria-label="Video workspace">
+      <div className="language-controls"><label>Sentence translation · direct from Chinese <select aria-label="Sentence translation language" value={appearance.settings.sentence_language ?? 'vi'} onChange={(event) => { setLearning(null); void appearance.update({ ...appearance.settings, sentence_language: event.target.value as 'en' | 'vi' }); }}><option value="en">English — Trung → Anh</option><option value="vi">Tiếng Việt — Trung → Việt</option></select></label>
+      <label>Word meanings <select aria-label="Word meaning language" value={appearance.settings.dictionary_language ?? 'en'} onChange={e => appearance.update({...appearance.settings, dictionary_language: e.target.value as 'en' | 'vi'})}><option value="en">English — CC-CEDICT</option><option value="vi">Tiếng Việt — bản dịch máy của từ Trung</option></select></label>
+      </div>
+      {learning && <p className="language-progress" role="status">Language preparation · words/pinyin: {learning.segments.length} sentences · {learning.target_language === "en" ? "English" : "Vietnamese"} translations ready: {learning.segments.filter(s => ["completed", "manual"].includes(s.translation.status)).length}/{learning.segments.length}. OCR results are already saved; machine translation runs separately.</p>}
       <VideoPlayer video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} learning={learning} settings={appearance.settings} updateSettings={appearance.update} settingsStatus={appearance.status} roi={document?.analysis?.settings.roi ?? settings?.roi} onWord={selectWord} fullscreenTarget={workspace} />
       <div className="video-details"><div><h2 title={video.original_name}>{video.title ?? video.original_name}</h2><p>{video.width} × {video.height} <span>·</span> {formatTime(video.duration)} <span>·</span> {video.video_codec.toUpperCase()} {video.audio_codec && ` / ${video.audio_codec.toUpperCase()}`} <span>·</span> {(video.size_bytes / 1024 / 1024).toFixed(1)} MB</p>{video.source_url && <p>{video.uploader && `${video.uploader} · `}<a href={video.source_url} target="_blank" rel="noreferrer">Douyin source</a></p>}</div><span className="subtle-tag">{video.imported_from === 'douyin' ? 'Douyin · local copy' : 'Imported locally'}</span></div>
       {video.codec_warning && <p className="codec-warning" role="status">{video.codec_warning}</p>}
@@ -141,6 +179,13 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
             catch (cause) { if (mounted.current) setError((cause as Error).message); }
             finally { operation.current = false; if (mounted.current) setBusy(false); }
           }}>
+            <label>OCR controls <select aria-label="OCR controls" value={advanced ? 'advanced' : 'basic'} onChange={(e) => setAdvanced(e.target.value === 'advanced')}><option value="basic">Cơ bản / Basic</option><option value="advanced">Nâng cao / Advanced</option></select></label>
+            {!advanced && <div><label>Cấu hình OCR <select aria-label="OCR preset" value={preset} onChange={(e) => {
+              const key = e.target.value;
+              if (key === 'custom') return;
+              setSettings({ ...settings, sample_fps: key === 'speed' ? 1 : key === 'balanced' ? 2 : 5, performance: { backend: 'auto', mode: 'balanced', cpu_threads: 4, cpu_runtime: 'ort', refine_timing: key === 'timing' } });
+            }}><option value="speed">Ưu tiên tốc độ — 1 mẫu/giây</option><option value="balanced">Cân bằng — 2 mẫu/giây</option><option value="timing">Ưu tiên thời điểm — 5 mẫu/giây + kiểm tra bổ sung</option><option value="custom" disabled>Tùy chỉnh — xem Nâng cao</option></select></label><p>Cùng model OCR. Ít mẫu chạy nhanh hơn nhưng dễ bỏ sót câu ngắn; nhiều mẫu giúp kiểm tra thời điểm với chi phí cao hơn. Không có cấu hình đảm bảo đọc đúng mọi chữ.</p><p>Thực tế: {settings.sample_fps} mẫu/giây · {settings.performance?.backend ?? 'cpu'} · {settings.performance?.mode ?? 'accurate'} · {settings.performance?.cpu_runtime ?? 'ort'} · refine {settings.performance?.refine_timing ? 'on' : 'off'}. Vùng phụ đề được giữ nguyên.</p></div>}
+            <div hidden={!advanced}>
             <div className="settings-grid">
               <label>Samples / second<input type="number" min="0.25" max="10" step="0.25" required value={settings.sample_fps} onChange={(event) => { setMessage(''); setSettings({ ...settings, sample_fps: Number(event.target.value) }); }} /></label>
               {(['x', 'y', 'width', 'height'] as const).map((key) => <label key={key}>{`Region ${key}`}<input type="number" min={key === 'width' || key === 'height' ? '0.001' : '0'} max="1" step="any" required value={Number(settings.roi[key].toFixed(4))} onChange={(event) => { setMessage(''); setSettings({ ...settings, roi: { ...settings.roi, [key]: Number(event.target.value) } }); }} /></label>)}
@@ -149,19 +194,25 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
               <legend>OCR performance</legend>
               <div className="settings-grid">
                 <label>Inference backend<select aria-label="Inference backend" value={settings.performance?.backend ?? 'cpu'} onChange={(event) => setSettings({ ...settings, performance: { mode: 'accurate', cpu_threads: 4, cpu_runtime: 'ort', ...settings.performance, backend: event.target.value as 'auto' | 'cpu' | 'intel-gpu' } })}>
-                  <option value="auto">Auto (measured CPU policy)</option><option value="cpu">CPU</option><option value="intel-gpu">Intel GPU (OpenVINO)</option>
+                  <option value="auto">Auto (measured CPU policy)</option><option value="cpu">CPU</option><option value="intel-gpu" disabled={capabilities !== null && !capabilities.intel_gpu}>Intel GPU (OpenVINO){capabilities && !capabilities.intel_gpu ? " — unavailable in backend runtime" : ""}</option>
                 </select></label>
                 <label>Processing mode<select aria-label="Processing mode" value={settings.performance?.mode ?? 'accurate'} onChange={(event) => setSettings({ ...settings, performance: { backend: 'auto', cpu_threads: 4, cpu_runtime: 'ort', ...settings.performance, mode: event.target.value as 'accurate' | 'balanced' | 'fast' } })}>
                   <option value="accurate">Accurate</option><option value="balanced">Balanced</option><option value="fast">Fast (experimental stroke reuse)</option>
                 </select></label>
                 <label>CPU runtime<select aria-label="CPU runtime" disabled={settings.performance?.backend === 'intel-gpu'} value={settings.performance?.cpu_runtime ?? 'ort'} onChange={(event) => setSettings({ ...settings, performance: { backend: 'cpu', mode: 'balanced', cpu_threads: 4, ...settings.performance, cpu_runtime: event.target.value as 'ort' | 'openvino-cpu' } })}>
-                  <option value="ort">ONNX Runtime</option><option value="openvino-cpu">OpenVINO CPU (optional runtime)</option>
+                  <option value="ort">ONNX Runtime</option><option value="openvino-cpu" disabled={capabilities !== null && !capabilities.openvino_cpu}>OpenVINO CPU (optional runtime){capabilities && !capabilities.openvino_cpu ? " — unavailable" : ""}</option>
                 </select></label>
               </div>
-              <p>Accurate uses timestamp seeking and no stroke heuristic. Balanced uses sequential decoding and tuned CPU threads at the same sample rate. Fast may miss subtle changes in difficult typography; it periodically verifies full OCR. Auto uses CPU, including for short videos. Intel GPU requires the optional OpenVINO runtime and never silently falls back.</p>
+              <label>CPU threads (Balanced / Fast)<select aria-label="CPU threads" disabled={settings.performance?.backend === 'intel-gpu' || settings.performance?.mode === 'accurate'} value={settings.performance?.cpu_threads ?? 4} onChange={e => setSettings({...settings, performance: {backend: 'auto', mode: 'balanced', cpu_runtime: 'ort', ...settings.performance, cpu_threads: Number(e.target.value) as 2 | 4 | 8}})}><option value="2">2</option><option value="4">4</option><option value="8">8</option></select></label>
+              <p>Accurate uses timestamp seeking and 2 CPU threads. Balanced uses sequential decoding/prefetch. They use the same OCR model. Auto selects the portable CPU path. GPU requires the optional OpenVINO backend launcher; higher concurrency uses more memory.</p>
+              <label><input type="checkbox" checked={settings.performance?.refine_timing ?? false} onChange={(event) => setSettings({ ...settings, performance: { backend: 'auto', mode: 'balanced', cpu_threads: 4, cpu_runtime: 'ort', ...settings.performance, refine_timing: event.target.checked } })} /> Refine subtitle start timing (extra OCR near transitions)</label>
+              <label>Parallel GPU requests<select aria-label="Parallel GPU requests" disabled={settings.performance?.backend !== 'intel-gpu' || settings.performance?.mode === 'fast'} value={settings.performance?.gpu_requests ?? 1} onChange={(event) => setSettings({ ...settings, performance: { backend: 'intel-gpu', mode: 'balanced', cpu_threads: 4, cpu_runtime: 'ort', ...settings.performance, gpu_requests: Number(event.target.value) as 1 | 2 | 4 } })}><option value="1">1 — lower memory/startup</option><option value="2">2 — experimental parallel OCR</option><option value="4">4 — experimental, higher memory</option></select></label>
+              <p>Balanced prepares upcoming frames while OCR runs. Parallel GPU requests use separate OCR engines and preserve media-time order; more requests may increase memory/startup and are not guaranteed faster. Fast is experimental and serial; it may save no OCR calls. Timing refinement checks two adjacent frames before moving a subtitle start earlier. Sample rate and ROI stay unchanged.</p>
               <button className="text-action" type="button" onClick={() => { const { performance: _performance, ...original } = settings; setSettings(original); }}>Restore original CPU OCR</button>
             </fieldset>
-            <div className="analysis-actions"><button className="secondary-button" disabled={busy}>Save settings</button><button className="primary-button" type="button" disabled={busy || running} onClick={() => void analyze(false)}>Analyze Video</button>{document?.analysis && <button className="secondary-button" type="button" disabled={busy || running} onClick={() => void analyze(true)}>Rerun OCR</button>}</div>
+            </div>
+            <p>Create / open subtitles opens matching saved subtitles, or runs OCR when none exist. Scan OCR again always scans again. Words/pinyin and translation are prepared afterwards; these are not two separate OCR/translation buttons.</p>
+            <div className="analysis-actions"><button className="secondary-button" disabled={busy}>Save settings</button><button className="primary-button" type="button" disabled={busy || running} onClick={() => void analyze(false)}>Create / open subtitles</button>{document?.analysis && <button className="secondary-button" type="button" disabled={busy || running} onClick={() => void analyze(true)}>Scan OCR again</button>}</div>
           </form>
         </>}
         {job && <div className="analysis-status" data-testid="analysis-status" data-status={job.status}>
@@ -175,8 +226,12 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
             catch (cause) { if (mounted.current) setError((cause as Error).message); }
             finally { if (mounted.current) setBusy(false); }
           }}>Cancel analysis</button>}</div>
-          <progress max="1" value={job.progress} aria-label="OCR processing progress" />
-          <p>{job.metrics.frames_processed} sampled frames · {Math.round(job.progress * 100)}% · {job.metrics.total_seconds.toFixed(1)}s elapsed{job.status === 'completed' ? ` · ${job.metrics.unique_segments} detected segments` : ''}</p>
+          <p role="status">{stages[job.stage ?? ''] ?? job.status}{job.stage === 'refining' ? ` · ${job.stage_completed ?? 0}/${job.stage_total ?? '?'} segments checked` : ''}</p>
+          <progress max="1" value={job.status === 'completed' ? 1 : job.stage === 'reading_and_ocr' ? job.progress : undefined} aria-label="OCR processing progress" />
+          <p>{job.metrics.frames_processed} sampled frames · {job.status === 'completed' ? '100% · ' : job.stage === 'reading_and_ocr' ? `${Math.floor(job.progress * 100)}% of video sampled · ` : ''}{Math.max(0, elapsed).toFixed(1)}s elapsed{job.status === 'completed' ? ` · ${job.metrics.unique_segments} detected segments` : ''}</p>
+          {running && job.updated_at && clock - Date.parse(job.updated_at) > 10000 && <p className="codec-warning">No worker update for over 10 seconds. The model may still be busy; check the backend connection or cancel. This is not proof of a stalled job.</p>}
+          <p>OCR saves Chinese subtitles first. Words/pinyin and sentence translation are prepared separately afterwards. No completion-time estimate is shown.</p>
+          <p>OCR calls: {job.metrics.ocr_calls} · Reused sampled frames: {job.metrics.reused_frames} · Extra timing frames: {job.metrics.refinement_frames ?? 0}. Reuse counts do not measure time saved.</p>
           <p data-testid="ocr-device">Requested: {job.execution?.requested_backend ?? job.settings.performance?.backend ?? 'cpu'} · Actual: {job.execution?.actual_backend ?? (activeJob(job) ? 'initializing' : job.status === 'failed' ? 'unavailable' : 'original CPU')} {job.execution?.threads ? `(${job.execution.threads} threads)` : ''} · Fallback: {job.execution?.fallback ? 'yes' : 'none'}</p>
           {job.execution?.stages && <p>{Object.entries(job.execution.stages).map(([key, value]) => `${key}: ${String(value)}`).join(' · ')}</p>}
           <details><summary>OCR model and runtime identity</summary><p className="ocr-identity">{job.engine_version}</p></details>
@@ -196,7 +251,7 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
         const saved = await api.saveWord(word, status, notes);
         if (mounted.current) setVocabulary((words) => [saved, ...words.filter((item) => item.id !== saved.id)]);
       }} deleteWord={async (id) => { await api.deleteWord(id); if (mounted.current) setVocabulary((words) => words.filter((item) => item.id !== id)); }}
-      saveTranslation={async (segment, text) => { if (document?.analysis) { const result = await api.editTranslation(video.id, document.analysis.id, segment, text); if (mounted.current && result.video_id === video.id) setLearning(result); } }}
-      retryTranslation={async () => { try { const result = await api.retryLearning(video.id); if (mounted.current) { setLearning(result); setLanguageRetry((value) => value + 1); } } catch (cause) { if (mounted.current) setError((cause as Error).message); } }} />
+      saveTranslation={async (segment, text) => { if (document?.analysis) { const result = await api.editTranslation(video.id, document.analysis.id, segment, text, appearance.settings.sentence_language ?? "vi"); if (mounted.current && result.video_id === video.id && result.target_language === currentLanguage.current) setLearning(result); } }}
+      retryTranslation={async () => { try { const result = await api.retryLearning(video.id, appearance.settings.sentence_language ?? "vi"); if (mounted.current && result.target_language === currentLanguage.current) { setLearning(result); setLanguageRetry((value) => value + 1); } } catch (cause) { if (mounted.current) setError((cause as Error).message); } }} />
   </div>;
 }

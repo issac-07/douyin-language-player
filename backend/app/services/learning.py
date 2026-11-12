@@ -20,7 +20,9 @@ class LearningService:
         self.repo = repository
         self.dictionary = Dictionary(settings.resource_dir)
         self.translator = LocalTranslator(settings.resource_dir)
-        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='vietnamese')
+        self.translators = {"vi": self.translator, "en": LocalTranslator(settings.resource_dir, "en")}
+        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='translation-vi')
+        self.pools = {'vi': self.pool, 'en': ThreadPoolExecutor(max_workers=1, thread_name_prefix='translation-en')}
         self.lock = threading.RLock()
         self.scheduled = set()
         self.closing = False
@@ -43,50 +45,56 @@ class LearningService:
             return tokens
         return [WordToken.model_validate(token) for token in saved]
 
-    def translation(self, text):
-        key = cache_key(text, self.translator.identity)
+    def translation(self, text, target="vi"):
+        translator = self.translators[target]
+        key = cache_key(text, translator.identity)
         with self.lock:
             saved = self._get('translation_cache', key)
             if saved and saved['status'] != 'pending':
                 return Translation.model_validate(saved)
-            if not self.translator.available:
-                return Translation(status='unavailable', model=self.translator.identity, error='Install the local Vietnamese model with scripts/setup_language_resources.py, then restart.')
+            if not translator.available:
+                return Translation(status='unavailable', model=translator.identity, error='Install the selected local translation model, then restart the backend.')
             if key not in self.scheduled and not self.closing and len(self.scheduled) < 512:
                 self.scheduled.add(key)
-                self._put('translation_cache', key, Translation(status='pending', model=self.translator.identity).model_dump())
-                self.pool.submit(self._translate, key, text)
-            return Translation(status='pending', model=self.translator.identity)
+                self._put('translation_cache', key, Translation(status='pending', model=translator.identity).model_dump())
+                self.pools[target].submit(self._translate, key, text, translator)
+            return Translation(status='pending', model=translator.identity)
 
-    def _translate(self, key, text):
+    def _translate(self, key, text, translator):
         try:
             if not self.closing:
-                result = self.translator.translate(text)
+                result = translator.translate(text)
                 self._put('translation_cache', key, result.model_dump())
         finally:
             with self.lock:
                 self.scheduled.discard(key)
 
-    def document(self, document):
+    def document(self, document, target=None):
+        target = target or self.get_player_settings().sentence_language
         segments = []
         with self.repo.connect() as db:
-            overrides = {row['segment_id']: row for row in db.execute('SELECT * FROM translation_overrides').fetchall()}
+            table = 'english_translation_overrides' if target == 'en' else 'translation_overrides'
+            overrides = {row['segment_id']: row for row in db.execute(f'SELECT * FROM {table}').fetchall()}
         for segment in document.segments:
             override = overrides.get(str(segment.id))
             translation = (Translation(status='manual', text=override['translation'])
-                           if override and override['source_text'] == segment.text else self.translation(segment.text))
+                           if override and override['source_text'] == segment.text else self.translation(segment.text, target))
+            translation.target_language = target
             segments.append(LearningSegment(id=segment.id, revision=segment.revision, text=segment.text, tokens=self.tokens(segment.text), translation=translation))
         return LearningDocument(video_id=document.video_id, analysis_id=document.analysis.id if document.analysis else None,
-                                segments=segments, dictionary_available=self.dictionary.available)
+                                target_language=target, segments=segments, dictionary_available=self.dictionary.available)
 
-    def retry(self, document):
+    def retry(self, document, target=None):
+        translator = self.translators[target or self.get_player_settings().sentence_language]
         with self.repo.connect() as db:
             for segment in document.segments:
-                key = cache_key(segment.text, self.translator.identity)
+                key = cache_key(segment.text, translator.identity)
                 row = db.execute('SELECT payload FROM translation_cache WHERE cache_key=?', (key,)).fetchone()
                 if row and json.loads(row['payload'])['status'] in ('failed', 'unavailable'):
                     db.execute('DELETE FROM translation_cache WHERE cache_key=?', (key,))
 
     def save_translation(self, video_id, segment_id, body):
+        table = "english_translation_overrides" if body.target_language == "en" else "translation_overrides"
         with self.repo.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT s.payload,a.analysis_id FROM subtitle_segments s JOIN active_analyses a ON a.analysis_id=s.analysis_id WHERE a.video_id=? AND s.id=?', (str(video_id), str(segment_id))).fetchone()
@@ -95,7 +103,7 @@ class LearningService:
             segment = json.loads(row['payload'])
             if row['analysis_id'] != str(body.analysis_id) or segment['revision'] != body.revision or segment['text'] != body.source_text:
                 return False
-            db.execute('INSERT INTO translation_overrides VALUES(?,?,?) ON CONFLICT(segment_id) DO UPDATE SET source_text=excluded.source_text,translation=excluded.translation', (str(segment_id), body.source_text, body.translation.strip()))
+            db.execute(f'INSERT INTO {table} VALUES(?,?,?) ON CONFLICT(segment_id) DO UPDATE SET source_text=excluded.source_text,translation=excluded.translation', (str(segment_id), body.source_text, body.translation.strip()))
         return True
 
     def words(self):
@@ -132,4 +140,5 @@ class LearningService:
     def shutdown(self):
         with self.lock:
             self.closing = True
-        self.pool.shutdown(wait=True, cancel_futures=True)
+        for pool in self.pools.values():
+            pool.shutdown(wait=True, cancel_futures=True)

@@ -19,9 +19,10 @@ class OpenVINOSession:
         self.request = self.compiled.create_infer_request()
 
     def __call__(self, image):
-        result = self.request.infer({self.compiled.input(0): image})
+        self.request.start_async({self.compiled.input(0): image}, share_inputs=False)
+        self.request.wait()
         # Outputs must survive the next infer_request call, just like ORT arrays.
-        return [result[port].copy() for port in self.compiled.outputs]
+        return [self.request.get_output_tensor(index).data.copy() for index in range(len(self.compiled.outputs))]
 
 
 def replace_sessions(engine, backend: str, threads: int):

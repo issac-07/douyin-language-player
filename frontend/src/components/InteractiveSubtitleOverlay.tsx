@@ -41,7 +41,7 @@ export function InteractiveSubtitleOverlay({ active, language, settings, roi, wi
         {settings.show_pinyin && <span className="word-pinyin" lang="zh-Latn" data-testid="word-pinyin">{token.pinyin}</span>}
         {chinese && <span className="word-chinese" data-word-text>{token.text}</span>}
       </button> : chinese && <span key={token.start} className="subtitle-punctuation">{token.text}</span>)}</div> : chinese && <div className="subtitle-fallback" lang="zh">{active.text}</div>}
-      {settings.show_translation && <div className="subtitle-vietnamese" lang="vi" data-testid="subtitle-vietnamese">{hasLanguage && language.translation.text ? language.translation.text : hasLanguage && ['failed', 'unavailable'].includes(language.translation.status) ? 'Vietnamese unavailable' : 'Translating locally…'}</div>}
+      {settings.show_translation && <div className="subtitle-vietnamese" lang={settings.sentence_language ?? "vi"} data-testid="subtitle-vietnamese">{hasLanguage && language.translation.text ? language.translation.text : hasLanguage && ['failed', 'unavailable'].includes(language.translation.status) ? `${settings.sentence_language === 'en' ? 'English' : 'Vietnamese'} unavailable` : 'Translating locally…'}</div>}
     </div>
   </div>;
 }

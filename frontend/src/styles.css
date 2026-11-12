@@ -262,3 +262,13 @@ kbd { border: 1px solid #3b4a32; padding: 2px 5px; border-radius: 3px; font-size
 .ocr-performance .settings-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .ocr-performance select { display: block; width: 100%; margin-top: 6px; }
 .ocr-identity { overflow-wrap: anywhere; }
+.video-library-actions { margin: 10px 0; }
+.video-library-actions button { border: 1px solid #84564c; border-radius: 5px; padding: 8px 12px; font-size: 12px; }
+
+.language-controls { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 10px; }
+.language-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; flex: 1 1 210px; }
+.language-controls select { max-width: 100%; padding: 7px; }
+.language-progress { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0 0 12px; }
+.ocr-performance > label { display: block; margin: 14px 0; line-height: 1.7; }
+.ocr-performance > label input[type="checkbox"] { width: auto; margin-right: 8px; }
+.processing-panel small { overflow-wrap: anywhere; }

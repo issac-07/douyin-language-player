@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 
+from app.api.storage import router as storage_router
 from app.api.videos import router
 from app.api.analysis import router as analysis_router
 from app.api.learning import router as learning_router
@@ -78,12 +79,13 @@ def create_app(settings: Settings | None = None, *, import_client_factory=None, 
             await asyncio.to_thread(app.state.worker.shutdown)
             await asyncio.to_thread(app.state.learning.shutdown)
 
-    app = FastAPI(title="Douyin Language Player", version="0.4.5", lifespan=lifespan)
+    app = FastAPI(title="Douyin Language Player", version="0.4.7", lifespan=lifespan)
     app.state.settings = settings
     app.state.repository = repository
     # Small multipart overhead allowance; import_video enforces the exact file limit.
     app.add_middleware(LocalUploadGuard, limit=settings.max_upload_bytes + 64 * 1024, allowed_origins=settings.allowed_origins)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
+    app.include_router(storage_router)
     app.include_router(router)
     app.include_router(analysis_router)
     app.include_router(learning_router)
@@ -91,7 +93,7 @@ def create_app(settings: Settings | None = None, *, import_client_factory=None, 
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "phase": 4, "version": "0.4.5", "ffprobe_available": shutil.which(settings.ffprobe) is not None,
+        return {"status": "ok", "phase": 4, "version": "0.4.7", "ffprobe_available": shutil.which(settings.ffprobe) is not None,
                 "max_download_bytes": settings.max_download_bytes,
                 "ffmpeg_available": shutil.which(settings.ffmpeg) is not None,
                 "max_upload_bytes": settings.max_upload_bytes,

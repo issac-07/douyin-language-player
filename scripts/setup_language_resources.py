@@ -56,23 +56,24 @@ def dictionary():
     print(f"Installed {len(rows)} CC-CEDICT entries", flush=True)
 
 
-def translation():
-    folder = RESOURCE_DIR / "opus-mt-zh-vi"
+def translation(target="vi"):
+    model = f"Helsinki-NLP/opus-mt-zh-{target}"
+    folder = RESOURCE_DIR / f"opus-mt-zh-{target}"
     manifest = folder / "local-model.json"
     if manifest.is_file():
         print("Translation resources already installed; preserving the pinned revision.", flush=True)
         return
-    with urllib.request.urlopen(f"https://huggingface.co/api/models/{MODEL}", timeout=30) as response:
+    with urllib.request.urlopen(f"https://huggingface.co/api/models/{model}", timeout=30) as response:
         revision = json.load(response)["sha"]
     hashes = {}
     for name in ["config.json", "generation_config.json", "pytorch_model.bin", "source.spm", "target.spm", "tokenizer_config.json", "vocab.json", "README.md"]:
         target = folder / name
         if not target.is_file():
             print(f"Downloading {name}", flush=True)
-            hashes[name] = download(f"https://huggingface.co/{MODEL}/resolve/{revision}/{name}", target)
+            hashes[name] = download(f"https://huggingface.co/{model}/resolve/{revision}/{name}", target)
         else:
             hashes[name] = hashlib.sha256(target.read_bytes()).hexdigest()
-    manifest.write_text(json.dumps({"model": MODEL, "revision": revision, "license": "Apache-2.0", "files": hashes}, indent=2), encoding="utf-8")
+    manifest.write_text(json.dumps({"model": model, "revision": revision, "license": "CC-BY-4.0" if target == "en" else "Apache-2.0", "files": hashes}, indent=2), encoding="utf-8")
     print(f"Installed translation model revision {revision}", flush=True)
 
 
@@ -80,9 +81,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dictionary-only", action="store_true")
     parser.add_argument("--translation-only", action="store_true")
+    parser.add_argument("--target", choices=["vi", "en"], default="vi")
     args = parser.parse_args()
     RESOURCE_DIR.mkdir(parents=True, exist_ok=True)
     if not args.translation_only:
         dictionary()
     if not args.dictionary_only:
-        translation()
+        translation(args.target)

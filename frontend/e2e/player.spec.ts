@@ -40,6 +40,7 @@ test('real MP4 import, decoding, playback, seek, speed, fullscreen, and persiste
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
   await page.getByLabel('Samples / second').fill('3');
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('Settings saved locally. No analysis has been run.')).toBeVisible();
@@ -68,7 +69,7 @@ test('v4.5 deletion confirms, removes the selected library copy and survives rel
   await page.goto('/');
   await page.getByLabel('Choose MP4 file').setInputFiles(fixture);
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
-  await expect(page.locator('.phase-badge')).toContainText('v4.5');
+  await expect(page.locator('.phase-badge')).toContainText('v4.7');
   page.once('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('button', { name: 'Delete selected video', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();

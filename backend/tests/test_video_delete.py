@@ -16,6 +16,7 @@ def seed_transcript(client, imported):
     repo.complete(job, [segment])
     with repo.connect() as db:
         db.execute('INSERT INTO translation_overrides VALUES(?,?,?)', (str(segment.id), '今天', 'Hôm nay'))
+        db.execute('INSERT INTO english_translation_overrides VALUES(?,?,?)', (str(segment.id), '今天', 'Today'))
         db.execute('INSERT INTO video_sources VALUES(?,?,?)', ('https://www.douyin.com/video/123', imported['id'], '{}'))
         db.execute('INSERT INTO import_jobs VALUES(?,?)', ('history', '{"video":{"id":"'+imported['id']+'"}}'))
     return job
@@ -35,7 +36,7 @@ def test_delete_removes_owned_data_and_cache_preserves_source_and_vocabulary(cli
     assert client.get(imported['media_url']).status_code == 404
     assert client.get('/api/vocabulary').json() == [saved]
     with client.app.state.repository.connect() as db:
-        for table in ['analyses', 'subtitle_segments', 'active_analyses', 'translation_overrides', 'video_sources', 'import_jobs', 'processing_settings']:
+        for table in ['analyses', 'subtitle_segments', 'active_analyses', 'translation_overrides', 'english_translation_overrides', 'video_sources', 'import_jobs', 'processing_settings']:
             assert db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
     with video_path.open('rb') as source:
         restored = client.post('/api/videos', files={'file': ('again.mp4', source, 'video/mp4')})
@@ -73,4 +74,4 @@ def test_delete_busy_and_origin_guards(client, imported):
 def test_delete_missing_cached_file_and_version(client, imported, settings):
     (settings.media_dir / f"{imported['id']}.mp4").unlink()
     assert client.delete(f"/api/videos/{imported['id']}").status_code == 200
-    assert client.get('/api/health').json()['version'] == '0.4.5'
+    assert client.get('/api/health').json()['version'] == '0.4.7'

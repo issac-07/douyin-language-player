@@ -53,3 +53,8 @@ The project does not redistribute the real user video. Validation reads the loca
 ## Optional OCR acceleration
 
 OpenVINO 2026.4.0 is used only when explicitly selected, in the project-local optional environment. OpenVINO and openvino-telemetry are distributed under Apache-2.0; see [OpenVINO licensing](https://github.com/openvinotoolkit/openvino/blob/master/LICENSE). No new OCR model weights or fonts are redistributed. The adapter uses the same RapidOCR PP-OCRv4 ONNX files and existing CTC alphabet. Intel graphics drivers remain the user's installed system components and are not installed or modified by this project.
+
+
+## Optional direct Chinese-English translation (v4.7)
+
+Helsinki-NLP/opus-mt-zh-en, revision cf109095479db38d6df799875e34039d4938aaa6. Source and model card: https://huggingface.co/Helsinki-NLP/opus-mt-zh-en . The model repository declares CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Attribution: Helsinki-NLP / OPUS-MT contributors; see the downloaded README and local-model.json for model provenance and file hashes. Downloaded weights are local resources, not committed source files. This is direct Chinese-English inference, separate from the existing Chinese-Vietnamese model.

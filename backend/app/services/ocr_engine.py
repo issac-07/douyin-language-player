@@ -12,7 +12,7 @@ import numpy as np
 from app.services.pipeline import FrameSample, OCRObservation
 
 CHINESE = re.compile(r"[\u3400-\u9fff]")
-PIPELINE_VERSION = "subtitle-v2.4:confident-replacements:chinese-lines:raw-clahe:conf=.60:similarity=.82:uncertain-gap=.60"
+PIPELINE_VERSION = "subtitle-v2.5:confident-insertions-deletions:chinese-lines:raw-clahe:conf=.60:similarity=.82:uncertain-gap=.60"
 
 
 def engine_identity() -> str:

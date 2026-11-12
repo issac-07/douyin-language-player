@@ -1,3 +1,4 @@
+import importlib.util
 from typing import Literal
 import json
 from uuid import UUID
@@ -11,6 +12,19 @@ from app.models.schemas import AnalysisJob, AnalysisRequest, AnalysisStarted, Su
 from app.services.video_frames import read_frame
 
 router = APIRouter(prefix="/api", tags=["subtitle analysis"])
+
+
+@router.get('/ocr-capabilities')
+def capabilities():
+    available = importlib.util.find_spec('openvino') is not None
+    devices, error = [], None
+    if available:
+        try:
+            import openvino
+            devices = list(openvino.Core().available_devices)
+        except Exception as exc:
+            error = str(exc)
+    return {'openvino_cpu': 'CPU' in devices, 'intel_gpu': any(d.startswith('GPU') for d in devices), 'error': error}
 
 
 @router.get("/videos/{video_id}/preview")

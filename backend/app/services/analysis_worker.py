@@ -21,6 +21,8 @@ from app.services.subtitle_detection import SubtitleDetector
 from app.services.video_frames import OpenCVFrameSource, SequentialFrameSource
 from app.services.ocr_runtime import resolve_runtime
 from app.services.ocr_reuse import SubtitleReuse
+from app.services.ocr_scheduling import prefetch, OCRLanes
+from app.services.boundary_refinement import refine_starts
 
 logger = logging.getLogger(__name__)
 TERMINAL = {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}
@@ -34,6 +36,7 @@ class AnalysisWorker:
         self.events: dict[UUID, threading.Event] = {}
         self.engine = None
         self._engine_key = None
+        self.extra_engines = []
         self.closing = False
         try:
             self.engine_version = engine_identity()
@@ -86,6 +89,7 @@ class AnalysisWorker:
             if job.status not in TERMINAL:
                 if event := self.events.get(job_id):
                     event.set()
+                job.stage = "cancelled"
                 job.status = JobStatus.CANCELLED
                 job.completed_at = datetime.now(timezone.utc)
                 self.repository.save_job(job)
@@ -94,39 +98,70 @@ class AnalysisWorker:
     def _run(self, job: AnalysisJob, video: Video, event: threading.Event):
         started = perf_counter()
         samples = None
+        heartbeat_stop = threading.Event()
+        def heartbeat():
+            while not heartbeat_stop.wait(.75):
+                with self.lock:
+                    if event.is_set() or job.status in TERMINAL:
+                        return
+                    job.metrics.total_seconds = perf_counter() - started
+                    job.updated_at = datetime.now(timezone.utc)
+                    self.repository.save_job(job)
+        heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
         try:
             plan = resolve_runtime(job.settings)
             with self.lock:
                 if event.is_set():
                     return
                 job.status = JobStatus.PROCESSING
+                job.stage = 'initializing'
+                job.started_at = datetime.now(timezone.utc)
+                job.updated_at = job.started_at
                 self.repository.save_job(job)
-            if self.engine is None or (self._engine_key is not None and self._engine_key != (plan.backend, plan.threads)):
+            heartbeat_thread.start()
+            if self.engine is None or (self._engine_key is not None and self._engine_key != (plan.backend, plan.threads, plan.requests)):
                 # Only one inference engine is retained by this serial worker.
                 self.engine = None
+                self.extra_engines = []
                 tick = perf_counter()
                 self.engine = RapidOCREngine(threads=plan.threads, backend=plan.backend)
-                self._engine_key = (plan.backend, plan.threads)
+                self.extra_engines = [RapidOCREngine(threads=plan.threads, backend=plan.backend) for _ in range(plan.requests-1)]
+                self._engine_key = (plan.backend, plan.threads, plan.requests)
                 job.metrics.initialization_seconds = perf_counter() - tick
             job.execution = {'requested_backend': plan.requested, 'actual_backend': plan.backend,
                              'threads': plan.threads if plan.backend != 'openvino-gpu' else None,
                              'decoder': plan.decoder, 'reuse': plan.reuse,
                              'fallback': False, 'stages': getattr(self.engine, 'execution', {})}
+            job.execution.update(ocr_lanes=plan.requests, timing_refinement=plan.refine)
             detector = SubtitleDetector(job.settings.sample_fps, video.duration)
             source = (SequentialFrameSource(video.duration, event.is_set) if plan.decoder == 'sequential'
                       else OpenCVFrameSource(video.duration))
             samples = source.samples(str(self.settings.media_dir / f"{video.id}.mp4"), job.settings)
+            prefetched = plan.decoder == 'sequential' or plan.requests > 1
+            def decoded(seconds):
+                job.metrics.decode_seconds += seconds
+            if prefetched:
+                samples = prefetch(samples, event.is_set, on_decode=decoded)
+            if plan.requests > 1:
+                samples = OCRLanes([self.engine, *self.extra_engines]).observations(samples, event.is_set)
             previous_image, previous_observation = None, None
             reuser = SubtitleReuse(plan.reuse) if plan.reuse != 'accurate' else None
             last_saved = perf_counter()
+            job.stage = 'reading_and_ocr'
+            job.stage_total = job.total_frames
             while True:
                 tick = perf_counter()
                 try:
-                    sample = next(samples)
+                    item = next(samples)
                 except StopIteration:
-                    job.metrics.decode_seconds += perf_counter() - tick
+                    if not prefetched:
+                        job.metrics.decode_seconds += perf_counter() - tick
                     break
-                job.metrics.decode_seconds += perf_counter() - tick
+                if prefetched:
+                    job.metrics.pipeline_wait_seconds += perf_counter() - tick
+                else:
+                    job.metrics.decode_seconds += perf_counter() - tick
+                sample, computed = item if plan.requests > 1 else (item, None)
                 if event.is_set():
                     return
                 tick = perf_counter()
@@ -136,7 +171,9 @@ class AnalysisWorker:
                 if reuser and not reused:
                     reused = reuser.can_reuse(sample.image, sample.timestamp)
                 job.metrics.change_detection_seconds += perf_counter() - tick
-                if reused:
+                if computed is not None:
+                    observation = computed
+                elif reused:
                     observation = replace(previous_observation, timestamp=sample.timestamp, inference_seconds=0, calls=0)
                     job.metrics.reused_frames += 1
                 else:
@@ -148,6 +185,7 @@ class AnalysisWorker:
                 detector.observe(observation)
                 job.metrics.merge_seconds += perf_counter() - tick
                 job.metrics.frames_processed += 1
+                job.stage_completed = job.metrics.frames_processed
                 job.metrics.ocr_calls += observation.calls
                 job.metrics.inference_seconds += observation.inference_seconds
                 job.metrics.total_seconds = perf_counter() - started
@@ -163,12 +201,23 @@ class AnalysisWorker:
                         job.metrics.database_seconds += perf_counter() - tick
                         last_saved = perf_counter()
             segments = detector.finish()
+            if plan.refine:
+                job.stage = 'refining'
+                job.stage_completed = 0
+                job.stage_total = len(segments)
+                def refinement_progress(done, total):
+                    job.stage_completed, job.stage_total = done, total
+                refine_starts(self.settings.media_dir / f'{video.id}.mp4', segments, job.settings,
+                              self.engine, event.is_set, job.metrics, on_progress=refinement_progress)
+            job.stage = 'saving'
+            job.stage_total = None
             with self.lock:
                 if event.is_set():
                     return
                 job.metrics.total_seconds = perf_counter() - started
                 job.metrics.unique_segments = len(segments)
                 job.metrics.average_confidence = sum(s.confidence for s in segments) / len(segments) if segments else 0
+                job.stage = "completed"
                 job.status = JobStatus.COMPLETED
                 job.progress = 1
                 job.completed_at = datetime.now(timezone.utc)
@@ -177,12 +226,16 @@ class AnalysisWorker:
             logger.exception("OCR job %s failed", job.id)
             with self.lock:
                 if not event.is_set():
+                    job.stage = "failed"
                     job.status = JobStatus.FAILED
                     job.error = f"OCR analysis failed: {exc}. Check the local dependencies and selected region, then rerun."
                     job.completed_at = datetime.now(timezone.utc)
                     job.metrics.total_seconds = perf_counter() - started
                     self.repository.save_job(job)
         finally:
+            heartbeat_stop.set()
+            if heartbeat_thread.ident is not None:
+                heartbeat_thread.join(timeout=2)
             if samples:
                 samples.close()
             with self.lock:

@@ -1,5 +1,9 @@
 # Douyin Language Player — Phase 4
 
+**v4.7 / OCR P1 improvements:** live stage/elapsed reporting during refinement, insertion/deletion merge fixes, direct Chinese→English or Chinese→Vietnamese sentence selection, separately labeled word meanings, Basic/Advanced OCR controls, hardware availability checks and local storage/explicit cache-history cleanup. The English model is installed locally; use `python scripts/setup_language_resources.py --translation-only --target en` for another installation. The OCR recognition model is unchanged and Fast showed no real-video skip benefit. See [validation, measurements, usage and remaining limits](docs/V4_7_VALIDATION.md).
+
+**v4.6 / Fast-OCR:** per-video-frame subtitle synchronization, bounded decode prefetch, optional two-frame start-boundary refinement and 1/2/4 parallel Intel GPU OCR lanes. Buttons are now **Create / open subtitles** (cache-or-scan) and **Scan OCR again** (force). Old settings/corrections remain usable. GPU concurrency is opt-in and Fast is still experimental. See [measurements, tests and limits](docs/V4_6_VALIDATION.md).
+
 **v4.5:** the header now shows the release label. To remove an imported video, select it and choose **Delete selected video**, then confirm. This removes the cached library copy and its transcripts/corrections, keeps the original source and saved vocabulary, and refuses deletion while imports/OCR are active. See [research and next OCR experiments](docs/V4_5_RESEARCH.md); this release does not change OCR performance algorithms.
 
 **OCR performance update:** new videos default to Auto/CPU + Balanced (four ONNX threads, sequential sampling, unchanged 2 FPS). Existing saved settings and corrected transcript caches retain original behavior. Open **Subtitle analysis settings → OCR performance** to select Accurate, Balanced, or experimental Fast, and inspect the actual execution backend. Optional OpenVINO CPU/Intel GPU uses `scripts/start-backend-openvino.cmd` after isolated setup. See [measured results, limits and reproduction](docs/OCR_PERFORMANCE_VALIDATION.md). **Restore original CPU OCR** restores the original settings/cache identity. No extension was added.
@@ -31,7 +35,7 @@ Implemented:
 - Packet integrity checks, full-duration validation, compatible-file preservation, remuxing or stream-selective H.264/AAC conversion; the existing import service owns hashing, deduplication and library publication. Titles, creators and canonical source associations persist in SQLite.
 - URL/local import options, existing-player opening, reloadable job status and local-file fallback. Optional automatic OCR uses only a confirmed/saved region and existing analysis caches.
 
-**Not implemented:** cache cleanup UI, manual segment creation/merge/split, interval-only OCR reruns or AnkiConnect. No language data is fabricated. There are no accounts, cloud services or extension. URL imports never read existing browser cookies or credentials and do not implement custom signing/challenge workarounds, DRM/private/live content or fragmented/separate streams. Opt-in public-page mode keeps ordinary site cookies inside a fresh disposable Edge session.
+**Not implemented:** automatic storage quotas/purge, manual segment creation/merge/split, interval-only OCR reruns or AnkiConnect. No language data is fabricated. There are no accounts, cloud services or extension. URL imports never read existing browser cookies or credentials and do not implement custom signing/challenge workarounds, DRM/private/live content or fragmented/separate streams. Opt-in public-page mode keeps ordinary site cookies inside a fresh disposable Edge session.
 
 ## Windows prerequisites
 

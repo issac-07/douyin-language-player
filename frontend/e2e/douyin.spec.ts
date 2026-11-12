@@ -22,7 +22,7 @@ test('Douyin share text to the existing player, full learning workflow and dupli
   await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(.2);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
-  await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
+  await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'completed', { timeout: 60_000 });
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay', { timeout: 45_000 });

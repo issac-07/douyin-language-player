@@ -10,10 +10,11 @@ async function openLanguageVideo(page: Page, filename: string) {
   await page.getByLabel('Choose MP4 file').setInputFiles(path.join(root, 'data/fixtures', filename));
   await expect(page.getByRole('heading', { name: filename })).toBeVisible();
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
   await page.getByLabel('Samples / second').fill('2');
-  const rerun = page.getByRole('button', { name: 'Rerun OCR', exact: true });
+  const rerun = page.getByRole('button', { name: 'Scan OCR again', exact: true });
   if (await rerun.count()) await rerun.click();
-  else await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
+  else await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'completed', { timeout: 60_000 });
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay', { timeout: 45_000 });
@@ -70,7 +71,7 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await page.getByRole('button', { name: 'Subtitle appearance', exact: true }).click();
   await page.getByRole('slider', { name: 'Chinese font size', exact: true }).fill('28');
   await page.getByRole('slider', { name: 'Pinyin font size', exact: true }).fill('14');
-  await page.getByRole('slider', { name: 'Vietnamese font size', exact: true }).fill('15');
+  await page.getByRole('slider', { name: 'Sentence translation font size', exact: true }).fill('15');
   await page.getByRole('slider', { name: 'Subtitle vertical position', exact: true }).fill('-5');
   await page.getByRole('slider', { name: 'Subtitle background opacity', exact: true }).fill('.6');
   await expect(page.getByText('Appearance saved', { exact: true })).toBeVisible();
@@ -83,7 +84,7 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await page.getByRole('button', { name: 'Subtitle appearance', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Chinese font size', exact: true })).toHaveValue('28');
   await expect(page.getByRole('slider', { name: 'Pinyin font size', exact: true })).toHaveValue('14');
-  await expect(page.getByRole('slider', { name: 'Vietnamese font size', exact: true })).toHaveValue('15');
+  await expect(page.getByRole('slider', { name: 'Sentence translation font size', exact: true })).toHaveValue('15');
   await expect(page.getByRole('slider', { name: 'Subtitle background opacity', exact: true })).toHaveValue('0.6');
   await page.getByLabel('Show generated subtitles', { exact: true }).uncheck();
   await expect(overlay).toHaveCount(0);
@@ -180,4 +181,41 @@ test('landscape, mobile sidebar, manual translation and wordbook persistence', a
   await checkBounds(page);
   await expect.poll(() => page.getByTestId('interactive-overlay').evaluate((element) => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
   await page.screenshot({ path: 'test-results/phase3-long-caption.png', fullPage: true });
+});
+
+
+test('v4.7 direct English, independent word language, presets and storage inventory', async ({ page }) => {
+  test.setTimeout(150_000);
+  await openLanguageVideo(page, 'mandarin-test.mp4');
+  await page.getByLabel('Sentence translation language', { exact: true }).selectOption('en');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/dinner|eat/i, {timeout: 60_000});
+  await expect(page.getByTestId('subtitle-vietnamese')).toHaveAttribute('lang', 'en');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByLabel('Sentence translation language', {exact:true})).toHaveValue('en');
+  await page.getByRole('slider', {name:'Seek video'}).fill('1');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/dinner|eat/i);
+  await page.getByLabel('Word meaning language', {exact:true}).selectOption('vi');
+  await page.getByTestId('interactive-overlay').getByRole('button', {name:'Look up 今天', exact:true}).click();
+  await expect(page.getByTestId('dictionary-panel')).toContainText('không phải định nghĩa CC-CEDICT');
+  await expect(page.getByTestId('dictionary-panel')).toContainText('today');
+  await page.getByText('Subtitle analysis settings', {exact:true}).click();
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('basic');
+  await page.getByLabel('OCR preset', {exact:true}).selectOption('speed');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
+  await expect(page.getByLabel('Samples / second')).toHaveValue('1');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
+  await page.getByLabel('Samples / second').fill('3');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('basic');
+  await expect(page.getByLabel('OCR preset', {exact:true})).toHaveValue('custom');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
+  await expect(page.getByLabel('Samples / second')).toHaveValue('3');
+  await page.getByText('Local storage / Dung lượng lưu trữ', {exact:true}).click();
+  await page.getByRole('button', {name:'Check storage usage', exact:true}).click();
+  await expect(page.getByText('dictionary_and_models:', {exact:false})).toBeVisible();
+  await page.screenshot({path:'test-results/v47-language-storage.png', fullPage:true});
+  await page.getByLabel('Sentence translation language', {exact:true}).selectOption('vi');
+  await page.getByLabel('Word meaning language', {exact:true}).selectOption('en');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay', {timeout:45_000});
+  await page.waitForTimeout(500);
 });

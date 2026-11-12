@@ -62,6 +62,7 @@ class Repository:
                 CREATE TABLE IF NOT EXISTS player_settings (id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS import_jobs (id TEXT PRIMARY KEY,payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS video_sources (canonical_url TEXT PRIMARY KEY,video_id TEXT NOT NULL REFERENCES videos(id),payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS english_translation_overrides (segment_id TEXT PRIMARY KEY,source_text TEXT NOT NULL,translation TEXT NOT NULL);
                 PRAGMA user_version=4;
             """)
 
@@ -80,6 +81,7 @@ class Repository:
             if db.execute("SELECT 1 FROM analyses WHERE video_id=? AND status IN ('pending','processing')", (value,)).fetchone():
                 raise ValueError('Cancel the active OCR job and wait for it to stop before deleting this video.')
             db.execute('DELETE FROM translation_overrides WHERE segment_id IN (SELECT s.id FROM subtitle_segments s JOIN analyses a ON a.id=s.analysis_id WHERE a.video_id=?)', (value,))
+            db.execute('DELETE FROM english_translation_overrides WHERE segment_id IN (SELECT s.id FROM subtitle_segments s JOIN analyses a ON a.id=s.analysis_id WHERE a.video_id=?)', (value,))
             db.execute('DELETE FROM subtitle_segments WHERE analysis_id IN (SELECT id FROM analyses WHERE video_id=?)', (value,))
             db.execute('DELETE FROM active_analyses WHERE video_id=?', (value,))
             db.execute('DELETE FROM analyses WHERE video_id=?', (value,))

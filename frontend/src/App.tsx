@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { StoragePanel } from './components/StoragePanel';
 import { Icon } from './components/Icon';
 import { OCRWorkspace } from './components/OCRWorkspace';
 import { api, uploadVideo } from './services/api';
@@ -16,6 +17,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const uploadLock = useRef(false);
+  const libraryRevision = useRef(0);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -24,10 +26,13 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = async () => {
+    const revision = libraryRevision.current;
     setLoading(true); setError('');
     try {
       const [status, library] = await Promise.all([api.health(), api.videos()]);
-      setHealth(status); setVideos(library);
+      setHealth(status);
+      if (revision !== libraryRevision.current) return;
+      setVideos(library);
       let remembered: string | null = null;
       try { remembered = localStorage.getItem('dlp-last-video'); } catch { /* Browser storage can be disabled. */ }
       setSelected((current) => library.find((video) => video.id === current?.id) ?? library.find((video) => video.id === remembered) ?? library[0] ?? null);
@@ -46,6 +51,7 @@ export default function App() {
     uploadLock.current = true; setUploading(true); setProgress(0);
     try {
       const result = await uploadVideo(file, setProgress);
+      libraryRevision.current += 1;
       setVideos((current) => [result.video, ...current.filter((video) => video.id !== result.video.id)]);
       setSelected(result.video);
       setNotice(result.reused ? 'Opened the existing local copy. No duplicate was stored.' : 'Video imported and saved to your local library.');
@@ -60,6 +66,7 @@ export default function App() {
     setDeleting(true); setError(''); setNotice('');
     try {
       const result = await api.deleteVideo(target.id);
+      libraryRevision.current += 1;
       const remaining = videos.filter((video) => video.id !== target.id);
       setVideos(remaining); setSelected(remaining[0] ?? null);
       try { localStorage.removeItem('dlp-last-video'); } catch { /* Optional storage. */ }
@@ -86,7 +93,7 @@ export default function App() {
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">v4.5 <span>·</span> WATCH & LEARN</span></header>
+      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">v4.7 <span>·</span> WATCH & LEARN</span></header>
       <main>
         <div className="page-heading"><div><div className="eyebrow">A LITTLE EVERY DAY</div><h1>Your next conversation<br className="mobile-break" /> starts here.</h1><p>Watch at your own pace. Make room for the words.</p></div><button className="secondary-button heading-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import video</button></div>
 
@@ -97,6 +104,7 @@ export default function App() {
         {uploading && <div className="upload-progress" role="status"><span>{progress < 100 ? `Uploading your video · ${progress}%` : 'Upload received · inspecting the MP4…'}</span><progress max="100" value={progress} /></div>}
 
         <DouyinImportPanel localBusy={uploading} onLocal={() => fileInput.current?.click()} onImported={(video, reused) => {
+          libraryRevision.current += 1;
           setVideos((current) => [video, ...current.filter((item) => item.id !== video.id)]);
           setSelected(video); setNotice(reused ? 'Opened the existing local copy. Cached analysis remains available.' : 'Douyin video imported into your local library.');
         }} />
@@ -119,7 +127,8 @@ export default function App() {
             <div className="panel-footnote"><span className="status-dot" />{selected ? 'Video ready for local playback' : 'Import a video to begin'}</div>
           </aside>
         </div>}
-        <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video · Chinese OCR · Mandarin & Vietnamese</span></footer>
+        <StoragePanel />
+        <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video · Chinese OCR · Mandarin · English / Vietnamese</span></footer>
       </main>
     </div>
   </div>;

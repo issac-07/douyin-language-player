@@ -17,6 +17,7 @@ class Translation(BaseModel):
     model: str | None = None
     error: str | None = None
     seconds: float | None = None
+    target_language: Literal["en", "vi"] = "vi"
 
 
 class LearningSegment(BaseModel):
@@ -28,6 +29,7 @@ class LearningSegment(BaseModel):
 
 
 class LearningDocument(BaseModel):
+    target_language: Literal["en", "vi"] = "vi"
     video_id: UUID
     analysis_id: UUID | None
     segments: list[LearningSegment]
@@ -47,6 +49,8 @@ class DictionaryResult(BaseModel):
     available: bool
     source: str = 'CC-CEDICT contributors / MDBG'
     language: str = 'English'
+    parts: list[DictionaryEntry] = Field(default_factory=list)
+    translation: Translation | None = None
     license: str = 'CC-BY-SA-4.0'
 
 
@@ -65,6 +69,7 @@ class SavedWord(VocabularyInput):
 
 
 class TranslationEdit(BaseModel):
+    target_language: Literal["en", "vi"] = "vi"
     model_config = ConfigDict(extra='forbid')
     analysis_id: UUID
     revision: int = Field(ge=0)
@@ -89,3 +94,5 @@ class PlayerSettings(BaseModel):
     show_all: bool = True
     pause_on_word: bool = False
     auto_pause: bool = False
+    sentence_language: Literal["en", "vi"] = "vi"
+    dictionary_language: Literal["en", "vi"] = "en"
