@@ -12,6 +12,33 @@ export interface Video {
   created_at: string;
   media_url: string;
   codec_warning: string | null;
+  title?: string | null;
+  source_url?: string | null;
+  uploader?: string | null;
+  imported_from?: string;
+}
+
+export interface URLImportJob {
+  id: string;
+  input_url: string;
+  canonical_url: string | null;
+  status: 'pending' | 'resolving' | 'downloading' | 'validating' | 'importing' | 'completed' | 'failed' | 'cancelled';
+  bytes_downloaded: number;
+  total_bytes: number | null;
+  attempt: number;
+  max_attempts: number;
+  metadata: { title: string | null; uploader: string | null; duration: number | null } | null;
+  video: Video | null;
+  reused: boolean;
+  error: string | null;
+  error_code?: string | null;
+  error_operation?: string | null;
+  upstream_http_status?: number | null;
+  extractor_version?: string | null;
+  diagnostics?: { operation: string; event: string; category: string | null; http_status: number | null; host: string | null; endpoint: string | null; exception_type: string | null; upstream_reason: string | null }[];
+  conversion: string;
+  elapsed_seconds: number;
+  analysis_message: string | null;
 }
 
 export interface ProcessingSettings {

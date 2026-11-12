@@ -5,6 +5,7 @@ import { api, uploadVideo } from './services/api';
 import { formatTime } from './services/playback';
 import type { Health, Video } from './types';
 import { usePlayerSettings } from './hooks/usePlayerSettings';
+import { DouyinImportPanel } from './components/DouyinImportPanel';
 
 export default function App() {
   const appearance = usePlayerSettings();
@@ -62,14 +63,14 @@ export default function App() {
         {loading && <p className="sidebar-empty">Loading your library…</p>}
         {!loading && videos.length === 0 && <p className="sidebar-empty">Your videos will appear here.<br />Start with a local MP4.</p>}
         {videos.map((video) => <button key={video.id} className={`recent-video ${selected?.id === video.id ? 'selected' : ''}`} onClick={() => setSelected(video)} aria-pressed={selected?.id === video.id}>
-          <span className="recent-icon"><Icon name="film" size={19} /></span><span className="recent-info"><strong title={video.original_name}>{video.original_name}</strong><small>{formatTime(video.duration)} · {video.width} × {video.height}</small></span>
+          <span className="recent-icon"><Icon name="film" size={19} /></span><span className="recent-info"><strong title={video.title ?? video.original_name}>{video.title ?? video.original_name}</strong><small>{formatTime(video.duration)} · {video.width} × {video.height}{video.imported_from === 'douyin' ? ' · Douyin' : ''}</small></span>
         </button>)}
       </div>
       <div className="local-note"><span className="status-dot" /><span>Local workspace<small>Files stay on this computer.</small></span></div>
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">PHASE 03 <span>·</span> WATCH & LEARN</span></header>
+      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">PHASE 04 <span>·</span> WATCH & LEARN</span></header>
       <main>
         <div className="page-heading"><div><div className="eyebrow">A LITTLE EVERY DAY</div><h1>Your next conversation<br className="mobile-break" /> starts here.</h1><p>Watch at your own pace. Make room for the words.</p></div><button className="secondary-button heading-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import video</button></div>
 
@@ -79,6 +80,10 @@ export default function App() {
         {health && !health.ffprobe_available && <div className="alert error" role="alert">FFprobe is missing. Add FFmpeg to PATH and restart the backend before importing.</div>}
         {uploading && <div className="upload-progress" role="status"><span>{progress < 100 ? `Uploading your video · ${progress}%` : 'Upload received · inspecting the MP4…'}</span><progress max="100" value={progress} /></div>}
 
+        <DouyinImportPanel localBusy={uploading} onLocal={() => fileInput.current?.click()} onImported={(video, reused) => {
+          setVideos((current) => [video, ...current.filter((item) => item.id !== video.id)]);
+          setSelected(video); setNotice(reused ? 'Opened the existing local copy. Cached analysis remains available.' : 'Douyin video imported into your local library.');
+        }} />
         {selected ? <OCRWorkspace key={selected.id} video={selected} appearance={appearance} /> : <div className="workspace-grid">
           <section className="viewing-column" aria-label="Video workspace">
             <div className={`empty-player ${dragging ? 'dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void importFile(event.dataTransfer.files[0]); }}>

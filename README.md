@@ -1,6 +1,10 @@
-# Douyin Language Player — Phase 3
+# Douyin Language Player — Phase 4
 
-A local React + TypeScript / FastAPI player with real Chinese OCR and language-learning subtitles **inside the video**. Phases 1–3 are implemented; Douyin URL downloading remains Phase 4. See [Phase 3 validation and Edge screenshots](docs/PHASE3_VALIDATION.md).
+A local React + TypeScript / FastAPI player with Chinese OCR and language-learning subtitles **inside the video**. Phase 4 adds anonymous Douyin URL import to the existing local library. See [Phase 4 validation](docs/PHASE4_VALIDATION.md) and [Phase 3 language/overlay validation](docs/PHASE3_VALIDATION.md).
+
+**Live verified fix:** the supplied `v.douyin.com/CF6Py5zaDbs/` link successfully imported through **Use public-page import (isolated Edge)**: 46.1 MB, about 4m46s, 1920×1080 H.264/AAC. The direct yt-dlp API method still returns metadata HTTP 403. Public-page mode is explicitly opt-in and uses a new temporary session; it never reads your existing profiles/cookies or interacts with login/verification prompts. See the real results and limits in the [debug report](docs/PHASE4_IMPORT_DEBUG.md).
+
+The [Phase 4 import investigation](docs/PHASE4_IMPORT_DEBUG.md) reviews upstream issues/PR #17826 and the implemented ordinary-public-page alternative. HTTP 403 is reported separately from explicit login, availability, network and compatibility failures. Expand **Diagnostic details** after a failed import for its actual stage/status. Older generic failures must be retried to obtain that evidence.
 
 Implemented:
 
@@ -19,8 +23,11 @@ Implemented:
 - Verified CC-CEDICT English definitions in the right sidebar, saved vocabulary with New/Learning/Known status and notes, and Anki-friendly vocabulary CSV export.
 - Real CPU Chinese→Vietnamese Marian inference with model/text caching, manual sentence translation corrections and explicit unavailable/error states.
 - Persistent appearance controls: three font sizes, vertical/horizontal position, opacity, color, shadow, per-line/all visibility, Interactive/Minimal modes and reset. Dictionary selection keeps playback going unless opt-in pause is enabled. Sentence replay/navigation and optional auto-pause are supported.
+- Douyin standard URLs, short links and sharing text; a replaceable yt-dlp metadata adapter; anonymous HTTPS downloads with redirect/DNS checks and pinned public addresses, bounded retries, cancellation, progress and temporary-file cleanup.
+- Packet integrity checks, full-duration validation, compatible-file preservation, remuxing or stream-selective H.264/AAC conversion; the existing import service owns hashing, deduplication and library publication. Titles, creators and canonical source associations persist in SQLite.
+- URL/local import options, existing-player opening, reloadable job status and local-file fallback. Optional automatic OCR uses only a confirmed/saved region and existing analysis caches.
 
-**Not implemented:** Douyin URL downloads, cache cleanup UI, manual segment creation/merge/split, interval-only OCR reruns or AnkiConnect. No language data is fabricated. There are no accounts, cloud services or extension.
+**Not implemented:** cache cleanup UI, manual segment creation/merge/split, interval-only OCR reruns or AnkiConnect. No language data is fabricated. There are no accounts, cloud services or extension. URL imports never read existing browser cookies or credentials and do not implement custom signing/challenge workarounds, DRM/private/live content or fragmented/separate streams. Opt-in public-page mode keeps ordinary site cookies inside a fresh disposable Edge session.
 
 ## Windows prerequisites
 
@@ -34,7 +41,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Verified here with **Python 3.12.10, Node 24.21.0, npm 11.19.0 and FFmpeg/FFprobe 9.0**. Use Python 3.12 and Node 24 LTS for this pinned set. RapidOCR requires Python below 3.13. FFprobe inspects imports; FFmpeg generates fixtures and can convert media manually. Edge is used for browser tests. No Docker/GPU is required. OCR models arrive in the RapidOCR wheel; Vietnamese model/dictionary installation is an explicit setup step below. Playback and inference then work offline.
+Verified here with **Python 3.12.10, Node 24.21.0, npm 11.19.0 and FFmpeg/FFprobe 9.0**. Use Python 3.12 and Node 24 LTS for this pinned set. RapidOCR requires Python below 3.13. FFprobe inspects imports; FFmpeg checks URL-download integrity, converts incompatible streams and generates fixtures. Edge is used for browser tests. No Docker/GPU is required. OCR models arrive in the RapidOCR wheel; Vietnamese model/dictionary installation is an explicit setup step below. Playback and inference then work offline.
 
 If a prerequisite is missing, install it using its official installer and reopen PowerShell. Dependencies below install only into this project. Commands use `npm.cmd` and the virtual environment's Python directly, so no PowerShell execution-policy change or environment activation is necessary. The Python launcher `py` was unavailable in the verified environment; use `python`.
 
@@ -50,7 +57,7 @@ Set-Location ..
 .\.venv\Scripts\python.exe scripts\setup_language_resources.py
 ```
 
-Python's complete tested dependency set is pinned in `backend/requirements-dev.lock.txt`; direct dependencies live in `requirements.txt` and `requirements-dev.txt`. The frontend has exact direct versions and `package-lock.json` for transitive versions. Installation needs internet access; the installed application does not.
+Python's complete tested dependency set is pinned in `backend/requirements-dev.lock.txt`; direct dependencies live in `requirements.txt` and `requirements-dev.txt`. The frontend has exact direct versions and `package-lock.json` for transitive versions. Installation and Douyin URL imports need internet access. Imported-file playback, OCR, dictionary and installed translation inference work offline. The downloader is pinned to **yt-dlp 2026.10.26**.
 
 Stop any existing backend before updating resources. The lock includes the official CPU PyTorch wheel index. The setup script installs **125,405 CC-CEDICT entries** and the official **Helsinki-NLP/opus-mt-zh-vi** model under `data/resources`, preserving its pinned revision and file hashes in `local-model.json`. Translation weights are about 312 MB; CPU PyTorch is a separate dependency download. No CUDA, paid API, account or system-wide install is used. For a partial setup, the script supports `--dictionary-only` and `--translation-only`.
 
@@ -77,7 +84,13 @@ Start-Process 'http://127.0.0.1:5173'
 
 Alternatively, run `.\scripts\start-backend.cmd` and `.\scripts\start-frontend.cmd` in separate terminals. Stop each with Ctrl+C. The scripts bind to loopback only. API health is at `http://127.0.0.1:8000/api/health`; interactive API docs are at `http://127.0.0.1:8000/docs`.
 
-Import your own MP4 with **Import MP4**, or generate the synthetic test fixture:
+Use **Import from Douyin URL**, paste a public link or sharing text and choose **Import link**. Progress is measured when the server provides a byte length; otherwise it is indeterminate. **Cancel import** prevents library publication. A successful import opens the same player, with its original complete audio/video. Import options collapse to leave room for viewing; **Import another video** opens them again. Restricted/unavailable links show the reason and **Import a local MP4 instead**.
+
+For the tested link, select **Use public-page import (isolated Edge)** before importing. This opens the official page normally in a temporary browser, then passes its actual public metadata into the existing downloader. It requires Node, the project's installed Playwright dependency and Microsoft Edge. The browser does not download the MP4 or export cookies; the existing safe downloader retrieves the accessible media after the browser closes. Direct cookie-free import remains the default.
+
+**Analyze after import** uses the imported media's saved OCR settings. A new video needs a subtitle region first: open **Subtitle analysis settings**, choose/save its region and analyze normally. Identical media reuses the existing library entry and cached analysis. Downloading never guesses a region or starts OCR with an unconfirmed default.
+
+Import your own MP4 with **Import MP4** or **Import Local MP4**, or generate the synthetic test fixture:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\generate_test_video.py
@@ -120,11 +133,11 @@ npm.cmd run build
 npm.cmd run test:e2e
 ```
 
-Or, from the root: `.\scripts\test.cmd`. Language tests require the local resources above. See [Phase 3 results](docs/PHASE3_VALIDATION.md), [Phase 2 results](docs/PHASE2_VALIDATION.md), and historical [Phase 1 results](docs/PHASE1_VALIDATION.md).
+Or, from the root: `.\scripts\test.cmd`. Language tests require the local resources above. See [Phase 4 results and live test instructions](docs/PHASE4_VALIDATION.md), [Phase 3 results](docs/PHASE3_VALIDATION.md), [Phase 2 results](docs/PHASE2_VALIDATION.md), and historical [Phase 1 results](docs/PHASE1_VALIDATION.md).
 
 The browser suite generates its fixture and launches isolated backend/frontend servers on **8011 / 5174**, with data under a unique `data\e2e\run-*` directory. It uses the already installed Edge browser (`channel: 'msedge'`), and does not install browsers or touch the normal library. Close other processes on those test ports before running. If Edge is absent, install it separately or configure Playwright to use a browser already available on your machine.
 
-The suite retains Phase 1 import/playback checks and adds real frame/Chinese OCR tests, merging, blank/multiline images, timing, persistence/migration, cache reuse, edit conflicts, exports, in-flight cancellation and video switching. Screenshots appear under `frontend\test-results` as `player-desktop.png`, `player-mobile.png`, `ocr-workspace.png` and `ocr-workspace-mobile.png`. Synthetic OCR has known ground truth; arbitrary user videos still need review. No translation or live Douyin URL functionality is claimed.
+The suite retains all earlier import/playback/OCR/language checks and adds URL parsing, SSRF/address pinning, job transitions/retries/cancellation, media integrity/conversion, deduplication/persistence, precise diagnostics, public-page proxy/dispatch checks and import-to-learning integration. Current results: **138 backend tests, 11 frontend tests and 8 Edge tests passed**, plus TypeScript/build. Routine network responses are deterministic fixtures; separate real tests successfully downloaded the authorized link and verified its downstream workflow. Screenshots appear under `frontend\test-results` and `data\validation`; see the reports for exact paths and limitations.
 
 ## API
 
@@ -158,13 +171,16 @@ See [architecture and concurrency details](docs/ARCHITECTURE.md). Run only one b
 
 ## Data and configuration
 
-Defaults: `data\library.sqlite3` stores videos, jobs, subtitle corrections, language/translation caches, manual translations, vocabulary and player preferences; `data\media\<uuid>.mp4` stores original bytes. Schema version 3 adds language tables without replacing the Phase 1/2 records. Reimporting identical bytes reuses the entry. All processing stays local. Media is copied into the library; the original is never modified. Subtitle JSON exports include a `language` section; SRT remains the corrected Chinese transcript.
+Defaults: `data\library.sqlite3` stores videos, jobs, source associations, subtitle corrections, language/translation caches, manual translations, vocabulary and player preferences; `data\media\<uuid>.mp4` stores imported MP4s. Schema version 4 adds URL job/source tables while preserving earlier records. Local uploads and compatible URL MP4s retain their original bytes; incompatible URL streams may be converted. Reimporting identical bytes reuses the entry. Analysis stays local. Original source files are never modified. Subtitle JSON exports include a `language` section; SRT remains the corrected Chinese transcript.
 
 Set environment variables **before starting the backend** if needed:
 
 ```powershell
 $env:DLP_DATA_DIR = 'D:\Projects\douyin-language-player\data'
 $env:DLP_MAX_UPLOAD_MB = '512'
+$env:DLP_MAX_DOWNLOAD_MB = '512'
+$env:DLP_IMPORT_TIMEOUT_SECONDS = '900'
+$env:DLP_FFMPEG = 'ffmpeg'
 $env:DLP_FFPROBE = 'ffprobe'
 $env:DLP_RESOURCE_DIR = 'D:\Projects\douyin-language-player\data\resources'
 ```
@@ -186,6 +202,7 @@ The frontend proxies API requests to `http://127.0.0.1:8000`. Set `DLP_API_URL` 
   ```
 
 - **Backend unreachable / Vite proxy error:** start FastAPI first on 8000, check `/api/health`, then refresh the library or retry the upload.
+- **Douyin HTTP 403 / extractor compatibility:** expand **Diagnostic details** for the actual stage/status/version. HTTP 403 and fresh-session messages alone do not prove an account requirement. The direct official extractor still fails for the supplied link; the explicitly selected isolated public-page method succeeded. It never reads existing browser cookies or uses custom verification workarounds. Restricted links and missing prerequisites still have local MP4 fallback.
 - **Port already in use:** stop the prior app instance or choose alternate ports and update the proxy and allowed origin together. Vite uses a strict port and does not silently choose another one.
 - **Cached media missing:** reimport the original identical MP4 to restore its entry. The backend responds with 410 for a missing stored file.
 - **Invalid region settings:** values are fractions of the video image, excluding black bars. Coordinates stay within 0–1, sizes are positive and the rectangle must fit. Saving settings alone does not run OCR.

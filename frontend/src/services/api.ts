@@ -1,4 +1,4 @@
-import type { AnalysisJob, DictionaryResult, Health, LearningDocument, PlayerSettings, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video } from '../types';
+import type { AnalysisJob, DictionaryResult, Health, LearningDocument, PlayerSettings, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video, URLImportJob } from '../types';
 
 export function errorMessage(body: unknown): string {
   if (body && typeof body === 'object' && 'detail' in body) {
@@ -18,6 +18,9 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  importDouyin: (text: string, analyzeAfterImport: boolean, usePublicPage = false) => request<URLImportJob>('/api/imports/douyin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, analyze_after_import: analyzeAfterImport, use_public_page: usePublicPage }) }),
+  urlImport: (id: string, signal?: AbortSignal) => request<URLImportJob>(`/api/imports/${id}`, { signal }),
+  cancelImport: (id: string) => request<URLImportJob>(`/api/imports/${id}/cancel`, { method: 'POST' }),
   learning: (id: string, signal?: AbortSignal) => request<LearningDocument>(`/api/videos/${id}/learning`, { signal }),
   retryLearning: (id: string) => request<LearningDocument>(`/api/videos/${id}/learning/retry`, { method: 'POST' }),
   dictionary: (word: string, signal?: AbortSignal) => request<DictionaryResult>(`/api/dictionary?word=${encodeURIComponent(word)}`, { signal }),

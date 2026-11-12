@@ -140,4 +140,4 @@ def test_v1_schema_migrates_without_losing_existing_media(client, imported, vide
         assert restarted.get(imported["media_url"]).status_code == 200
         assert restarted.get(f"/api/videos/{imported['id']}/subtitles").json()["analysis"] is None
     with sqlite3.connect(legacy / "library.sqlite3") as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4

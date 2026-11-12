@@ -60,7 +60,7 @@ test('invalid file rejection and responsive workspace', async ({ page }) => {
   await page.getByLabel('Choose MP4 file').setInputFiles({ name: 'not-a-video.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not a video') });
   await expect(page.getByRole('alert')).toContainText('valid MP4 header');
   await page.getByRole('tab', { name: 'Vocabulary' }).click();
-  await expect(page.getByRole('tabpanel')).toContainText('Save words');
+  await expect(page.getByRole('tabpanel', { name: 'Vocabulary', exact: true })).toContainText('Save words');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });

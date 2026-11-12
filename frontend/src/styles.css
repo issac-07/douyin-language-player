@@ -234,3 +234,26 @@ kbd { border: 1px solid #3b4a32; padding: 2px 5px; border-radius: 3px; font-size
 .learning-workspace:fullscreen .learning-panel { min-height: 0; overflow: auto; }
 .learning-workspace:fullscreen .transcript-content { max-height: none; }
 @media (max-width: 700px) { .learning-workspace:fullscreen { grid-template-columns: minmax(0, 1fr); display: block; padding: 0; } .learning-workspace:fullscreen > .viewing-column { height: 75vh; } .learning-workspace:fullscreen .learning-panel { margin-top: 10px; } .sentence-controls { gap: 12px; } .sentence-controls > button { font-size: 9px; } .control-row .volume-slider { display: none; } .dictionary-details { border: 1px solid #3b4c30; border-radius: 5px; padding: 12px; } }
+/* URL imports share the existing local library and player. */
+.import-panel { margin: 0 0 22px; padding: 16px 20px; border: 1px solid var(--border, #303b39); border-radius: 14px; background: #17211f; }
+.import-options { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.import-options button { background: transparent; color: #aab8b3; border: 1px solid transparent; border-radius: 7px; padding: 8px 12px; cursor: pointer; }
+.import-options button[aria-selected="true"] { color: #b9ebd0; border-color: #436352; background: #23392e; }
+.import-panel label { display: block; font-size: 13px; color: #d5dfdb; }
+.import-options-toggle { display: block; margin-left: auto; margin-bottom: 6px; }
+.url-input-row { display: flex; align-items: center; gap: 12px; margin-top: 7px; }
+.url-input-row textarea { flex: 1; min-width: 0; width: 100%; resize: vertical; border: 1px solid #3e4c46; border-radius: 8px; background: #101917; color: #edf4ef; padding: 10px 12px; font: inherit; font-size: 13px; }
+.import-help { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 10px 0; }
+.import-help input { accent-color: #8dd7ad; vertical-align: middle; }
+.import-help small, .url-import-status small { color: #a1b3aa; font-size: 12px; }
+.url-import-status { margin-top: 14px; padding-top: 12px; border-top: 1px solid #34443c; font-size: 13px; overflow-wrap: anywhere; }
+.import-status-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.url-import-status progress { display: block; width: 100%; height: 5px; margin: 10px 0 6px; accent-color: #8dd7ad; }
+.url-import-status p { margin: 8px 0; line-height: 1.6; }
+.url-import-status.failed { color: #f4b6a8; }
+.import-metadata { color: #c5d6cc; }
+.import-diagnostics { margin: 10px 0; color: #bdc9c2; font-size: 12px; }
+.import-diagnostics summary { cursor: pointer; }
+.import-diagnostics ol { padding-left: 20px; line-height: 1.8; max-height: 240px; overflow: auto; }
+.local-import-choice { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: #afbeb6; font-size: 13px; }
+@media (max-width: 640px) { .url-input-row { align-items: stretch; flex-direction: column; } .import-panel { padding: 14px; } }

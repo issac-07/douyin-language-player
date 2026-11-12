@@ -39,6 +39,12 @@ class Video(BaseModel):
     created_at: datetime
     media_url: str
     codec_warning: str | None = None
+    pixel_format: str | None = None
+    title: str | None = None
+    source_url: str | None = None
+    source_id: str | None = None
+    uploader: str | None = None
+    imported_from: str = "local"
 
 
 class ImportResult(BaseModel):

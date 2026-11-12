@@ -5,6 +5,7 @@ rapidocr-onnxruntime==1.4.4
 onnxruntime==1.31.1
 opencv-python==4.13.0.92
 numpy==2.2.6
+yt-dlp==2026.10.26
 jieba==0.42.1
 pypinyin==0.55.0
 transformers==4.57.6

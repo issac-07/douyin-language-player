@@ -60,7 +60,9 @@ class Repository:
                 CREATE TABLE IF NOT EXISTS translation_overrides (segment_id TEXT PRIMARY KEY,source_text TEXT NOT NULL,translation TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS vocabulary (word TEXT PRIMARY KEY,payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS player_settings (id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL);
-                PRAGMA user_version=3;
+                CREATE TABLE IF NOT EXISTS import_jobs (id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS video_sources (canonical_url TEXT PRIMARY KEY,video_id TEXT NOT NULL REFERENCES videos(id),payload TEXT NOT NULL);
+                PRAGMA user_version=4;
             """)
 
     def list_videos(self) -> list[Video]:
@@ -91,6 +93,45 @@ class Repository:
         with self.connect() as db:
             row = db.execute("SELECT payload FROM processing_settings WHERE video_id=?", (str(video_id),)).fetchone()
         return ProcessingSettings.model_validate_json(row["payload"]) if row else ProcessingSettings()
+
+    def has_settings(self, video_id: UUID) -> bool:
+        with self.connect() as db:
+            return db.execute("SELECT 1 FROM processing_settings WHERE video_id=?", (str(video_id),)).fetchone() is not None
+
+    def save_import(self, job) -> None:
+        with self.connect() as db:
+            db.execute("INSERT INTO import_jobs(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", (str(job.id), job.model_dump_json()))
+
+    def get_import(self, job_id):
+        from app.models.imports import ImportJob
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM import_jobs WHERE id=?", (str(job_id),)).fetchone()
+        return ImportJob.model_validate_json(row['payload']) if row else None
+
+    def list_imports(self, limit=20):
+        from app.models.imports import ImportJob
+        with self.connect() as db:
+            rows = db.execute("SELECT payload FROM import_jobs ORDER BY rowid DESC LIMIT ?", (limit,)).fetchall()
+        return [ImportJob.model_validate_json(row['payload']) for row in rows]
+
+    def find_source(self, url):
+        with self.connect() as db:
+            row = db.execute("SELECT v.payload FROM video_sources s JOIN videos v ON v.id=s.video_id WHERE canonical_url=?", (url,)).fetchone()
+        return Video.model_validate_json(row['payload']) if row else None
+
+    def get_source(self, url):
+        from app.models.imports import SourceMetadata
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM video_sources WHERE canonical_url=?", (url,)).fetchone()
+        return SourceMetadata.model_validate_json(row['payload']) if row else None
+
+    def attach_source(self, video, source):
+        if not video.source_url:
+            video = video.model_copy(update=dict(title=source.title, source_url=source.canonical_url, source_id=source.video_id, uploader=source.uploader, imported_from='douyin'))
+        with self.connect() as db:
+            db.execute("UPDATE videos SET payload=? WHERE id=?", (video.model_dump_json(), str(video.id)))
+            db.execute("INSERT INTO video_sources(canonical_url,video_id,payload) VALUES(?,?,?) ON CONFLICT(canonical_url) DO UPDATE SET video_id=excluded.video_id,payload=excluded.payload", (source.canonical_url, str(video.id), source.model_dump_json()))
+        return video
 
     def save_settings(self, video_id: UUID, settings: ProcessingSettings) -> None:
         with self.connect() as db:
