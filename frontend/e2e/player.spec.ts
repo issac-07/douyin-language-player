@@ -64,3 +64,18 @@ test('invalid file rejection and responsive workspace', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
+test('v4.5 deletion confirms, removes the selected library copy and survives reload', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Choose MP4 file').setInputFiles(fixture);
+  await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
+  await expect(page.locator('.phase-badge')).toContainText('v4.5');
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('button', { name: 'Delete selected video', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Delete selected video', exact: true }).click();
+  await expect(page.getByText('Video deleted from the library. Original source file and saved vocabulary were kept.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toHaveCount(0);
+});

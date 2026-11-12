@@ -18,7 +18,9 @@ from app.services.ocr_engine import RapidOCREngine, engine_identity
 from app.services.pipeline import analysis_cache_key
 from app.services.repository import Repository
 from app.services.subtitle_detection import SubtitleDetector
-from app.services.video_frames import OpenCVFrameSource
+from app.services.video_frames import OpenCVFrameSource, SequentialFrameSource
+from app.services.ocr_runtime import resolve_runtime
+from app.services.ocr_reuse import SubtitleReuse
 
 logger = logging.getLogger(__name__)
 TERMINAL = {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}
@@ -31,6 +33,7 @@ class AnalysisWorker:
         self.lock = threading.RLock()
         self.events: dict[UUID, threading.Event] = {}
         self.engine = None
+        self._engine_key = None
         self.closing = False
         try:
             self.engine_version = engine_identity()
@@ -48,7 +51,9 @@ class AnalysisWorker:
             path = self.settings.media_dir / f"{video.id}.mp4"
             if not path.is_file():
                 raise HTTPException(410, "The cached MP4 is missing. Reimport the original video.")
-            key = analysis_cache_key(video.sha256, settings, self.engine_version)
+            plan = resolve_runtime(settings)
+            identity = plan.identity
+            key = analysis_cache_key(video.sha256, settings, identity)
             latest = self.repository.latest_job(video.id)
             if latest and latest.status not in TERMINAL:
                 if latest.cache_key == key and not force:
@@ -64,7 +69,7 @@ class AnalysisWorker:
             total = math.ceil(video.duration * settings.sample_fps)
             if total > 100_000:
                 raise HTTPException(422, "This would sample over 100,000 frames. Reduce the sampling rate or trim the video.")
-            job = AnalysisJob(id=uuid4(), video_id=video.id, cache_key=key, engine_version=self.engine_version,
+            job = AnalysisJob(id=uuid4(), video_id=video.id, cache_key=key, engine_version=identity,
                               settings=settings, total_frames=total, created_at=datetime.now(timezone.utc),
                               timestamp_uncertainty=1 / settings.sample_fps)
             self.repository.save_job(job)
@@ -90,28 +95,58 @@ class AnalysisWorker:
         started = perf_counter()
         samples = None
         try:
+            plan = resolve_runtime(job.settings)
             with self.lock:
                 if event.is_set():
                     return
                 job.status = JobStatus.PROCESSING
                 self.repository.save_job(job)
-            if self.engine is None:
-                self.engine = RapidOCREngine()
+            if self.engine is None or (self._engine_key is not None and self._engine_key != (plan.backend, plan.threads)):
+                # Only one inference engine is retained by this serial worker.
+                self.engine = None
+                tick = perf_counter()
+                self.engine = RapidOCREngine(threads=plan.threads, backend=plan.backend)
+                self._engine_key = (plan.backend, plan.threads)
+                job.metrics.initialization_seconds = perf_counter() - tick
+            job.execution = {'requested_backend': plan.requested, 'actual_backend': plan.backend,
+                             'threads': plan.threads if plan.backend != 'openvino-gpu' else None,
+                             'decoder': plan.decoder, 'reuse': plan.reuse,
+                             'fallback': False, 'stages': getattr(self.engine, 'execution', {})}
             detector = SubtitleDetector(job.settings.sample_fps, video.duration)
-            samples = OpenCVFrameSource(video.duration).samples(str(self.settings.media_dir / f"{video.id}.mp4"), job.settings)
+            source = (SequentialFrameSource(video.duration, event.is_set) if plan.decoder == 'sequential'
+                      else OpenCVFrameSource(video.duration))
+            samples = source.samples(str(self.settings.media_dir / f"{video.id}.mp4"), job.settings)
             previous_image, previous_observation = None, None
-            for sample in samples:
+            reuser = SubtitleReuse(plan.reuse) if plan.reuse != 'accurate' else None
+            last_saved = perf_counter()
+            while True:
+                tick = perf_counter()
+                try:
+                    sample = next(samples)
+                except StopIteration:
+                    job.metrics.decode_seconds += perf_counter() - tick
+                    break
+                job.metrics.decode_seconds += perf_counter() - tick
                 if event.is_set():
                     return
+                tick = perf_counter()
                 fingerprint = cv2.cvtColor(sample.image, cv2.COLOR_BGR2GRAY)
                 # Exact crop equality only: never skip a subtly changed character.
-                if previous_image is not None and fingerprint.shape == previous_image.shape and np.array_equal(fingerprint, previous_image):
+                reused = previous_image is not None and fingerprint.shape == previous_image.shape and np.array_equal(fingerprint, previous_image)
+                if reuser and not reused:
+                    reused = reuser.can_reuse(sample.image, sample.timestamp)
+                job.metrics.change_detection_seconds += perf_counter() - tick
+                if reused:
                     observation = replace(previous_observation, timestamp=sample.timestamp, inference_seconds=0, calls=0)
                     job.metrics.reused_frames += 1
                 else:
                     observation = self.engine.recognize(sample)
+                    if reuser:
+                        reuser.remember(sample.image, observation)
                 previous_image, previous_observation = fingerprint, observation
+                tick = perf_counter()
                 detector.observe(observation)
+                job.metrics.merge_seconds += perf_counter() - tick
                 job.metrics.frames_processed += 1
                 job.metrics.ocr_calls += observation.calls
                 job.metrics.inference_seconds += observation.inference_seconds
@@ -120,7 +155,13 @@ class AnalysisWorker:
                 with self.lock:
                     if event.is_set():
                         return
-                    self.repository.save_job(job)
+                    # Polling is 750ms; committing on every frame adds needless
+                    # SQLite overhead. Cancellation/publication still serialize.
+                    if perf_counter() - last_saved >= .75:
+                        tick = perf_counter()
+                        self.repository.save_job(job)
+                        job.metrics.database_seconds += perf_counter() - tick
+                        last_saved = perf_counter()
             segments = detector.finish()
             with self.lock:
                 if event.is_set():

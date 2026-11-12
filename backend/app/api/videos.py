@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from starlette.responses import FileResponse
@@ -29,6 +29,42 @@ def upload_video(request: Request, file: UploadFile):
 @router.get("/{video_id}", response_model=Video)
 def video_metadata(request: Request, video_id: UUID):
     return require_video(request, video_id)
+
+
+@router.delete('/{video_id}')
+def delete_video(request: Request, video_id: UUID):
+    state = request.app.state
+    media = state.settings.media_dir / f'{video_id}.mp4'
+    if media.resolve().parent != state.settings.media_dir.resolve():
+        raise HTTPException(409, 'The cached media path is invalid; no file was removed.')
+    staged = None
+    with state.imports.lock, state.worker.lock:
+        if state.imports.events or state.worker.events:
+            raise HTTPException(409, 'Wait for imports/OCR to stop before deleting a video.')
+        require_video(request, video_id)
+        def stage_media():
+            nonlocal staged
+            if media.exists():
+                target = media.with_name(f'{video_id}.{uuid4().hex}.delete-pending')
+                media.replace(target)
+                staged = target
+        try:
+            removed = state.repository.remove_video(video_id, stage_media)
+        except Exception as exc:
+            if staged is not None:
+                staged.replace(media)
+            if isinstance(exc, (OSError, ValueError)):
+                raise HTTPException(409, 'Could not delete this video. Stop playback/imports/OCR and retry; library data was preserved.') from exc
+            raise
+        if not removed:
+            raise HTTPException(404, 'Video not found.')
+        cleanup_pending = False
+        if staged is not None:
+            try:
+                staged.unlink()
+            except OSError:
+                cleanup_pending = True
+        return {'deleted': True, 'media_cleanup_pending': cleanup_pending}
 
 
 @router.api_route("/{video_id}/media", methods=["GET", "HEAD"], response_class=FileResponse)

@@ -50,3 +50,6 @@ Lightning CSS is an unmodified build dependency. Its MPL notice and source avail
 **Helsinki-NLP / University of Helsinki OPUS-MT:** [opus-mt-zh-vi](https://huggingface.co/Helsinki-NLP/opus-mt-zh-vi), official revision `67ea2dbfbaf13a16772a40346d3d72b59e591443`, Apache-2.0 as stated by its model card. Model weights, tokenizer and card are downloaded explicitly into `data/resources/opus-mt-zh-vi`; the local manifest preserves file hashes. No model training or weight changes are performed. Keep the upstream model card, licence and applicable notices when redistributing model resources.
 
 The project does not redistribute the real user video. Validation reads the local authorized copy and stores only local reports/screenshots. Translation text is model-generated; verified CC-CEDICT dictionary meanings are a separate source.
+## Optional OCR acceleration
+
+OpenVINO 2026.4.0 is used only when explicitly selected, in the project-local optional environment. OpenVINO and openvino-telemetry are distributed under Apache-2.0; see [OpenVINO licensing](https://github.com/openvinotoolkit/openvino/blob/master/LICENSE). No new OCR model weights or fonts are redistributed. The adapter uses the same RapidOCR PP-OCRv4 ONNX files and existing CTC alphabet. Intel graphics drivers remain the user's installed system components and are not installed or modified by this project.

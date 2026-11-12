@@ -145,6 +145,22 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
               <label>Samples / second<input type="number" min="0.25" max="10" step="0.25" required value={settings.sample_fps} onChange={(event) => { setMessage(''); setSettings({ ...settings, sample_fps: Number(event.target.value) }); }} /></label>
               {(['x', 'y', 'width', 'height'] as const).map((key) => <label key={key}>{`Region ${key}`}<input type="number" min={key === 'width' || key === 'height' ? '0.001' : '0'} max="1" step="any" required value={Number(settings.roi[key].toFixed(4))} onChange={(event) => { setMessage(''); setSettings({ ...settings, roi: { ...settings.roi, [key]: Number(event.target.value) } }); }} /></label>)}
             </div>
+            <fieldset className="ocr-performance">
+              <legend>OCR performance</legend>
+              <div className="settings-grid">
+                <label>Inference backend<select aria-label="Inference backend" value={settings.performance?.backend ?? 'cpu'} onChange={(event) => setSettings({ ...settings, performance: { mode: 'accurate', cpu_threads: 4, cpu_runtime: 'ort', ...settings.performance, backend: event.target.value as 'auto' | 'cpu' | 'intel-gpu' } })}>
+                  <option value="auto">Auto (measured CPU policy)</option><option value="cpu">CPU</option><option value="intel-gpu">Intel GPU (OpenVINO)</option>
+                </select></label>
+                <label>Processing mode<select aria-label="Processing mode" value={settings.performance?.mode ?? 'accurate'} onChange={(event) => setSettings({ ...settings, performance: { backend: 'auto', cpu_threads: 4, cpu_runtime: 'ort', ...settings.performance, mode: event.target.value as 'accurate' | 'balanced' | 'fast' } })}>
+                  <option value="accurate">Accurate</option><option value="balanced">Balanced</option><option value="fast">Fast (experimental stroke reuse)</option>
+                </select></label>
+                <label>CPU runtime<select aria-label="CPU runtime" disabled={settings.performance?.backend === 'intel-gpu'} value={settings.performance?.cpu_runtime ?? 'ort'} onChange={(event) => setSettings({ ...settings, performance: { backend: 'cpu', mode: 'balanced', cpu_threads: 4, ...settings.performance, cpu_runtime: event.target.value as 'ort' | 'openvino-cpu' } })}>
+                  <option value="ort">ONNX Runtime</option><option value="openvino-cpu">OpenVINO CPU (optional runtime)</option>
+                </select></label>
+              </div>
+              <p>Accurate uses timestamp seeking and no stroke heuristic. Balanced uses sequential decoding and tuned CPU threads at the same sample rate. Fast may miss subtle changes in difficult typography; it periodically verifies full OCR. Auto uses CPU, including for short videos. Intel GPU requires the optional OpenVINO runtime and never silently falls back.</p>
+              <button className="text-action" type="button" onClick={() => { const { performance: _performance, ...original } = settings; setSettings(original); }}>Restore original CPU OCR</button>
+            </fieldset>
             <div className="analysis-actions"><button className="secondary-button" disabled={busy}>Save settings</button><button className="primary-button" type="button" disabled={busy || running} onClick={() => void analyze(false)}>Analyze Video</button>{document?.analysis && <button className="secondary-button" type="button" disabled={busy || running} onClick={() => void analyze(true)}>Rerun OCR</button>}</div>
           </form>
         </>}
@@ -161,6 +177,9 @@ export function OCRWorkspace({ video, appearance }: { video: Video; appearance: 
           }}>Cancel analysis</button>}</div>
           <progress max="1" value={job.progress} aria-label="OCR processing progress" />
           <p>{job.metrics.frames_processed} sampled frames · {Math.round(job.progress * 100)}% · {job.metrics.total_seconds.toFixed(1)}s elapsed{job.status === 'completed' ? ` · ${job.metrics.unique_segments} detected segments` : ''}</p>
+          <p data-testid="ocr-device">Requested: {job.execution?.requested_backend ?? job.settings.performance?.backend ?? 'cpu'} · Actual: {job.execution?.actual_backend ?? (activeJob(job) ? 'initializing' : job.status === 'failed' ? 'unavailable' : 'original CPU')} {job.execution?.threads ? `(${job.execution.threads} threads)` : ''} · Fallback: {job.execution?.fallback ? 'yes' : 'none'}</p>
+          {job.execution?.stages && <p>{Object.entries(job.execution.stages).map(([key, value]) => `${key}: ${String(value)}`).join(' · ')}</p>}
+          <details><summary>OCR model and runtime identity</summary><p className="ocr-identity">{job.engine_version}</p></details>
           {job.error && <p role="alert" className="error-text">{job.error}</p>}
           {job.status === 'cancelled' && <p>The previous completed transcript is preserved. Cancellation is checked between frames and after in-flight inference.</p>}
         </div>}

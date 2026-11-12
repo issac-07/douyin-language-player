@@ -73,3 +73,47 @@ class OpenCVFrameSource:
                 yield FrameSample(timestamp, crop_frame(image, settings.roi))
         finally:
             capture.release()
+
+
+class SequentialFrameSource:
+    """Decode in order, retrieve only sampled images, use actual decoded PTS.
+
+    Chooses the first decoded frame at/after each requested time. No FPS-derived
+    timestamp is substituted. Cancellation is checked on every decoded frame.
+    """
+    def __init__(self, duration: float | None = None, cancelled=None):
+        self.duration = duration
+        self.cancelled = cancelled or (lambda: False)
+
+    def samples(self, path: str, settings: ProcessingSettings) -> Iterator[FrameSample]:
+        capture = cv2.VideoCapture(path, cv2.CAP_FFMPEG)
+        try:
+            if not capture.isOpened():
+                raise ValueError('OpenCV could not decode this video. Convert a copy to H.264/AAC.')
+            capture.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+            fps, count = capture.get(cv2.CAP_PROP_FPS), capture.get(cv2.CAP_PROP_FRAME_COUNT)
+            if fps <= 0 or count <= 0:
+                raise ValueError('The video does not expose a usable frame rate or duration.')
+            duration = self.duration if self.duration is not None else count / fps
+            index, previous = 0, -1.0
+            while index / settings.sample_fps < duration and not self.cancelled():
+                if not capture.grab():
+                    if previous >= duration - 1 / fps - .001:
+                        break
+                    raise ValueError('Frame decoding ended before the expected media duration.')
+                timestamp = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
+                if not math.isfinite(timestamp) or timestamp < 0 or timestamp <= previous:
+                    raise ValueError('Sequential decoder timestamps are unavailable or not increasing; select Accurate mode.')
+                previous = timestamp
+                if timestamp + 1e-7 < index / settings.sample_fps:
+                    continue
+                if timestamp >= duration:
+                    break
+                ok, image = capture.retrieve()
+                if not ok:
+                    raise ValueError('Could not retrieve a decoded sample. Select Accurate mode or repair the video.')
+                yield FrameSample(timestamp, crop_frame(image, settings.roi))
+                # Rates above the source FPS must not repeat a decoded image.
+                index = max(index + 1, math.floor((timestamp + 1e-7) * settings.sample_fps) + 1)
+        finally:
+            capture.release()

@@ -14,6 +14,7 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const uploadLock = useRef(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
@@ -52,6 +53,21 @@ export default function App() {
     finally { uploadLock.current = false; setUploading(false); if (fileInput.current) fileInput.current.value = ''; }
   };
 
+  const deleteSelected = async () => {
+    if (!selected || deleting || uploading) return;
+    const target = selected;
+    if (!window.confirm(`Delete "${target.title ?? target.original_name}" from this library? Its cached MP4, OCR results and subtitle corrections will be removed. Your original source file and saved vocabulary will be kept.`)) return;
+    setDeleting(true); setError(''); setNotice('');
+    try {
+      const result = await api.deleteVideo(target.id);
+      const remaining = videos.filter((video) => video.id !== target.id);
+      setVideos(remaining); setSelected(remaining[0] ?? null);
+      try { localStorage.removeItem('dlp-last-video'); } catch { /* Optional storage. */ }
+      setNotice(result.media_cleanup_pending ? 'Video removed. A locked cache file still needs cleanup after playback stops.' : 'Video deleted from the library. Original source file and saved vocabulary were kept.');
+    } catch (cause) { setError((cause as Error).message); }
+    finally { setDeleting(false); }
+  };
+
   return <div className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="/" aria-label="Douyin Language Player home"><span className="brand-mark">语</span><span>Douyin<span className="brand-sub">LANGUAGE PLAYER</span></span></a>
@@ -70,7 +86,7 @@ export default function App() {
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">PHASE 04 <span>·</span> WATCH & LEARN</span></header>
+      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">v4.5 <span>·</span> WATCH & LEARN</span></header>
       <main>
         <div className="page-heading"><div><div className="eyebrow">A LITTLE EVERY DAY</div><h1>Your next conversation<br className="mobile-break" /> starts here.</h1><p>Watch at your own pace. Make room for the words.</p></div><button className="secondary-button heading-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import video</button></div>
 
@@ -84,6 +100,7 @@ export default function App() {
           setVideos((current) => [video, ...current.filter((item) => item.id !== video.id)]);
           setSelected(video); setNotice(reused ? 'Opened the existing local copy. Cached analysis remains available.' : 'Douyin video imported into your local library.');
         }} />
+        {selected && <div className="video-library-actions"><button className="text-action danger" disabled={deleting || uploading} onClick={() => void deleteSelected()}>{deleting ? 'Deleting…' : 'Delete selected video'}</button></div>}
         {selected ? <OCRWorkspace key={selected.id} video={selected} appearance={appearance} /> : <div className="workspace-grid">
           <section className="viewing-column" aria-label="Video workspace">
             <div className={`empty-player ${dragging ? 'dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void importFile(event.dataTransfer.files[0]); }}>

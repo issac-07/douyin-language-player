@@ -32,13 +32,20 @@ def engine_identity() -> str:
 
 
 class RapidOCREngine:
-    def __init__(self):
+    def __init__(self, threads: int = 2, backend: str = 'ort'):
         from rapidocr_onnxruntime import RapidOCR
 
         self.version = engine_identity()
         # Restrict native threads so a normal laptop can keep playing video.
-        self.engine = RapidOCR(intra_op_num_threads=2, inter_op_num_threads=1, use_cls=False, text_score=0.3,
+        self.engine = RapidOCR(intra_op_num_threads=threads, inter_op_num_threads=1, use_cls=False, text_score=0.3,
                                det_limit_side_len=736, det_limit_type="max")
+        self.execution = {'detection': 'CPUExecutionProvider', 'recognition': 'CPUExecutionProvider', 'classification': 'disabled'}
+        if backend != 'ort':
+            from app.services.openvino_backend import replace_sessions
+            self.execution = replace_sessions(self.engine, backend, threads)
+            self.version += f':{backend}:f32-v1'
+        if threads != 2:
+            self.version += f':threads={threads}'
 
     def recognize(self, sample: FrameSample) -> OCRObservation:
         image = sample.image

@@ -18,6 +18,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  deleteVideo: (id: string) => request<{ deleted: boolean; media_cleanup_pending: boolean }>(`/api/videos/${id}`, { method: 'DELETE' }),
   importDouyin: (text: string, analyzeAfterImport: boolean, usePublicPage = false) => request<URLImportJob>('/api/imports/douyin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, analyze_after_import: analyzeAfterImport, use_public_page: usePublicPage }) }),
   urlImport: (id: string, signal?: AbortSignal) => request<URLImportJob>(`/api/imports/${id}`, { signal }),
   cancelImport: (id: string) => request<URLImportJob>(`/api/imports/${id}/cancel`, { method: 'POST' }),

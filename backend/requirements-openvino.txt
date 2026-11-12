@@ -1,0 +1,2 @@
+# Optional; test in an isolated venv first. Existing NumPy 2.2.6 is compatible.
+openvino==2026.4.0

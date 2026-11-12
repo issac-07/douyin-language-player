@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
 
-from app.models.schemas import AnalysisJob, JobStatus, ProcessingSettings, SubtitleDocument, SubtitleSegment, Video
+from app.models.schemas import AnalysisJob, JobStatus, OCRPerformance, ProcessingSettings, SubtitleDocument, SubtitleSegment, Video
 
 
 class Repository:
@@ -70,6 +70,26 @@ class Repository:
             rows = db.execute("SELECT payload FROM videos ORDER BY rowid DESC").fetchall()
         return [Video.model_validate_json(row["payload"]) for row in rows]
 
+    def remove_video(self, video_id: UUID, stage_media) -> bool:
+        """Remove video-owned data; caller stages media and restores on rollback."""
+        value = str(video_id)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM videos WHERE id=?', (value,)).fetchone():
+                return False
+            if db.execute("SELECT 1 FROM analyses WHERE video_id=? AND status IN ('pending','processing')", (value,)).fetchone():
+                raise ValueError('Cancel the active OCR job and wait for it to stop before deleting this video.')
+            db.execute('DELETE FROM translation_overrides WHERE segment_id IN (SELECT s.id FROM subtitle_segments s JOIN analyses a ON a.id=s.analysis_id WHERE a.video_id=?)', (value,))
+            db.execute('DELETE FROM subtitle_segments WHERE analysis_id IN (SELECT id FROM analyses WHERE video_id=?)', (value,))
+            db.execute('DELETE FROM active_analyses WHERE video_id=?', (value,))
+            db.execute('DELETE FROM analyses WHERE video_id=?', (value,))
+            db.execute('DELETE FROM video_sources WHERE video_id=?', (value,))
+            # Finished import history must not keep offering a removed video.
+            db.execute("DELETE FROM import_jobs WHERE json_extract(payload, '$.video.id')=?", (value,))
+            db.execute('DELETE FROM videos WHERE id=?', (value,))
+            stage_media()
+        return True
+
     def get_video(self, video_id: UUID) -> Video | None:
         with self.connect() as db:
             row = db.execute("SELECT payload FROM videos WHERE id=?", (str(video_id),)).fetchone()
@@ -92,7 +112,9 @@ class Repository:
     def get_settings(self, video_id: UUID) -> ProcessingSettings:
         with self.connect() as db:
             row = db.execute("SELECT payload FROM processing_settings WHERE video_id=?", (str(video_id),)).fetchone()
-        return ProcessingSettings.model_validate_json(row["payload"]) if row else ProcessingSettings()
+        # Only new/unconfigured videos receive the measured Balanced policy.
+        # Existing JSON without performance fields retains original CPU behavior.
+        return ProcessingSettings.model_validate_json(row["payload"]) if row else ProcessingSettings(performance=OCRPerformance())
 
     def has_settings(self, video_id: UUID) -> bool:
         with self.connect() as db:

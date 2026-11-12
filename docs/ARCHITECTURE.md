@@ -1,5 +1,17 @@
 # Local architecture — Phases 1–4
 
+## OCR performance update
+
+`OCRPerformance` is optional inside the existing processing-settings JSON. Absent fields preserve the original two-thread ORT/seek/exact-reuse path and its cache identity; no database tables or schema version were changed. Newly unconfigured videos receive Auto/Balanced (ORT CPU, four intra-op threads, one inter-op thread). Accurate uses seeking and disables stroke reuse; Balanced uses sequential decoding and only original exact-crop reuse. Fast explicitly opts into experimental, fail-closed, high-contrast white-stroke reuse with a two-second verification deadline. Sample FPS and user ROI never change with modes.
+
+`ocr_runtime.py` resolves policy and model/runtime/configuration identity before cache lookup. `openvino_backend.py` replaces only RapidOCR 1.4.4 detection/recognition inference sessions using the same bundled ONNX files, FP32 hints, preprocessing, CTC alphabet and postprocessing. It compiles explicit CPU/GPU devices and checks `EXECUTION_DEVICES`; Intel GPU never silently falls back. Classification remains disabled. OpenVINO is optional in an isolated environment and is not imported by ordinary ORT processing.
+
+`SequentialFrameSource` grabs frames in order and retrieves only selected images. It emits actual decoded PTS, auto-rotates like the original source, checks cancellation between every decoded frame and bounds memory to current images. For VFR it selects the first frame at/after each sampling target, which can differ from the old seeking behavior; Accurate remains available. It never synthesizes media timestamps from average FPS.
+
+The existing serial worker retains one engine keyed by backend/thread configuration, preserves cancellation/publication locking, and throttles progress-only SQLite writes to at most one every 750ms. Final transcript publication remains atomic. Execution metadata records requested/actual backend, threads, decoder, reuse algorithm, stage devices and fallback state. Existing completed transcripts and manual corrections stay active until a new job succeeds. Progressive transcripts remain deferred.
+
+See [OCR performance validation](OCR_PERFORMANCE_VALIDATION.md) for the frozen-reference benchmark, actual measurements, quality checks, optional setup and current limitations. Language processing/translation is excluded from OCR benchmarks.
+
 Vite proxies `/api` to FastAPI. HTML5 video plays the original MP4 using byte-range requests. Playback and subtitle selection use actual `video.currentTime`, including seek events, rather than wall-clock estimates. Everything runs locally.
 
 ## Modules

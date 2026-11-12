@@ -44,6 +44,7 @@ export interface URLImportJob {
 export interface ProcessingSettings {
   roi: { x: number; y: number; width: number; height: number };
   sample_fps: number;
+  performance?: { backend: 'auto' | 'cpu' | 'intel-gpu'; mode: 'accurate' | 'balanced' | 'fast'; cpu_threads: 2 | 4 | 8; cpu_runtime: 'ort' | 'openvino-cpu' };
 }
 
 export interface Health {
@@ -75,6 +76,7 @@ export interface AnalysisJob {
   error: string | null;
   engine_version: string;
   timestamp_uncertainty: number;
+  execution?: { requested_backend?: string; actual_backend?: string; threads?: number | null; decoder?: string; reuse?: string; fallback?: boolean; stages?: Record<string, unknown> };
   metrics: {
     frames_processed: number; ocr_calls: number; reused_frames: number;
     total_seconds: number; inference_seconds: number;

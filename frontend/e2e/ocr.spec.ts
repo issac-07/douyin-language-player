@@ -42,8 +42,12 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
     await page.getByLabel(`Region ${name}`, { exact: true }).fill(value);
   }
   await page.getByLabel('Samples / second').fill('2');
+  await page.getByLabel('Processing mode', { exact: true }).selectOption('balanced');
+  await page.getByLabel('Inference backend', { exact: true }).selectOption('auto');
   await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'completed', { timeout: 60_000 });
+  await expect(page.getByTestId('ocr-device')).toContainText('Actual: ort (4 threads)');
+  await expect(page.getByTestId('ocr-device')).toContainText('Fallback: none');
   const rows = page.getByTestId('subtitle-row');
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText('今天我们一起去吃饭');

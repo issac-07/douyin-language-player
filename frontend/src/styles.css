@@ -257,3 +257,8 @@ kbd { border: 1px solid #3b4a32; padding: 2px 5px; border-radius: 3px; font-size
 .import-diagnostics ol { padding-left: 20px; line-height: 1.8; max-height: 240px; overflow: auto; }
 .local-import-choice { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: #afbeb6; font-size: 13px; }
 @media (max-width: 640px) { .url-input-row { align-items: stretch; flex-direction: column; } .import-panel { padding: 14px; } }
+.ocr-performance { min-width: 0; border: 1px solid var(--border, #35433c); border-radius: 8px; margin: 16px 0; padding: 12px; }
+.ocr-performance legend { padding: 0 6px; }
+.ocr-performance .settings-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.ocr-performance select { display: block; width: 100%; margin-top: 6px; }
+.ocr-identity { overflow-wrap: anywhere; }

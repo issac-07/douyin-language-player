@@ -78,7 +78,7 @@ def create_app(settings: Settings | None = None, *, import_client_factory=None, 
             await asyncio.to_thread(app.state.worker.shutdown)
             await asyncio.to_thread(app.state.learning.shutdown)
 
-    app = FastAPI(title="Douyin Language Player", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="Douyin Language Player", version="0.4.5", lifespan=lifespan)
     app.state.settings = settings
     app.state.repository = repository
     # Small multipart overhead allowance; import_video enforces the exact file limit.
@@ -91,7 +91,7 @@ def create_app(settings: Settings | None = None, *, import_client_factory=None, 
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "phase": 4, "ffprobe_available": shutil.which(settings.ffprobe) is not None,
+        return {"status": "ok", "phase": 4, "version": "0.4.5", "ffprobe_available": shutil.which(settings.ffprobe) is not None,
                 "max_download_bytes": settings.max_download_bytes,
                 "ffmpeg_available": shutil.which(settings.ffmpeg) is not None,
                 "max_upload_bytes": settings.max_upload_bytes,
