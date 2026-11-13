@@ -10,7 +10,8 @@ export function DictionaryPanel({ selection, result, error, vocabulary, save, ed
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setStatus(existing?.status ?? 'new'); setNotes(existing?.notes ?? ''); setMessage(''); }, [selection?.word]);
+  useEffect(() => { setStatus(existing?.status ?? 'new'); setNotes(existing?.notes ?? ''); }, [selection?.word,existing?.status,existing?.notes]);
+  useEffect(()=>setMessage(''),[selection?.word]);
   return <details className="dictionary-details" open data-testid="dictionary-panel">
     <summary>Word details</summary>
     {!selection ? <p>Choose a Chinese word in the video or transcript to see its verified dictionary meanings here.</p> : <>

@@ -82,12 +82,14 @@ test('v4.5 deletion confirms, removes the selected library copy and survives rel
 
 
 test('V2 saved vocabulary remains usable without any videos',async({page})=>{
+ test.setTimeout(90000);
  await page.request.put('/api/vocabulary',{data:{word:'明天',status:'learning',notes:'Keep without video'}});
  await page.goto('/');
  await page.getByRole('button',{name:'Saved words',exact:true}).click();
  await expect(page.getByLabel('Notes for 明天')).toHaveValue('Keep without video');
  await page.getByRole('listitem').getByRole('button',{name:'View word 明天',exact:true}).click();
- await expect(page.getByTestId('selected-word')).toContainText('tomorrow');
+ await expect(page.getByTestId('selected-word')).toContainText('明天');
+ await expect(page.getByTestId('selected-word').locator('.summary-meaning > p')).toContainText(/mai/i,{timeout:45000});
  page.once('dialog',d=>d.accept());
  await page.getByRole('button',{name:'Remove saved word',exact:true}).click();
  await expect(page.getByLabel('Notes for 明天')).toHaveCount(0);

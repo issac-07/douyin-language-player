@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnalysisJob, DictionaryResult, LearningDocument, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video, WordToken } from '../types';
-import { createPortal } from 'react-dom';
 import { api } from '../services/api';
 import { formatTime } from '../services/playback';
 import { VideoPlayer } from './VideoPlayer';
@@ -17,6 +16,7 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
   const [document, setDocument] = useState<SubtitleDocument | null>(null);
   const [job, setJob] = useState<AnalysisJob | null>(null);
   const [learning, setLearning] = useState<LearningDocument | null>(null);
+  useEffect(()=>setLearning(null),[appearance.settings.sentence_language]);
   const [languageRetry, setLanguageRetry] = useState(0);
   const [dictionary, setDictionary] = useState<DictionaryResult | null>(null);
   const [selection, setSelection] = useState<{ word: string; pinyin: string; nonce: number } | null>(null);
@@ -34,6 +34,8 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
   const preset = !presetCompatible ? 'custom' : settings?.sample_fps === 1 && settings.performance?.mode === 'balanced' && !settings.performance?.refine_timing ? 'speed' : settings?.sample_fps === 2 && settings.performance?.mode === 'balanced' && !settings.performance?.refine_timing ? 'balanced' : settings?.sample_fps === 5 && settings.performance?.refine_timing && settings.performance?.mode === 'balanced' ? 'timing' : 'custom';
 
   const [time, setTime] = useState(0);
+  const [seekRequest,setSeekRequest]=useState<{time:number;nonce:number}|null>(null);
+  const seekNonce=useRef(0);
   const [previewTime, setPreviewTime] = useState(Math.min(1, video.duration / 2));
   const media = useRef<HTMLVideoElement>(null);
   const mounted = useRef(true);
@@ -147,7 +149,7 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
   };
 
   const seek = (value: number) => {
-    if (media.current) { media.current.currentTime = value; setTime(value); }
+    if (media.current) { setTime(value);setSeekRequest({time:value,nonce:++seekNonce.current}); }
   };
   const saveSegment = async (segment: SubtitleSegment, text: string, start: number, end: number) => {
     if (!document?.analysis) return;
@@ -162,11 +164,8 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
 
   return <div className="workspace-grid learning-workspace" ref={workspace}>
     <section className="viewing-column" aria-label="Video workspace">
-      {globalThis.document.getElementById('toolbar-languages') && createPortal(<div className="language-controls"><label>Sentence language <select aria-label="Sentence translation language" value={appearance.settings.sentence_language ?? 'vi'} onChange={(event) => { setLearning(null); void appearance.update({ ...appearance.settings, sentence_language: event.target.value as 'en' | 'vi' }); }}><option value="en">English</option><option value="vi">Tiếng Việt</option></select></label>
-      <label>Word meanings <select aria-label="Word meaning language" value={appearance.settings.dictionary_language ?? 'en'} onChange={e => appearance.update({...appearance.settings, dictionary_language: e.target.value as 'en' | 'vi'})}><option value="en">English</option><option value="vi">Tiếng Việt</option></select></label>
-      </div>,globalThis.document.getElementById('toolbar-languages')!)}
       <div className="language-progress" role="status">{learning?.segments.some(item => item.translation.status === 'pending') ? 'Preparing sentence translations…' : learning?.segments.some(item => ['failed', 'unavailable'].includes(item.translation.status)) ? 'Some translations are unavailable. See Transcript for details.' : ''}</div>
-      <VideoPlayer libraryActions={libraryActions} video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} learning={learning} settings={appearance.settings} updateSettings={appearance.update} settingsStatus={appearance.status} roi={document?.analysis?.settings.roi ?? settings?.roi} onWord={selectWord} fullscreenTarget={workspace} />
+      <VideoPlayer seekRequest={seekRequest} libraryActions={libraryActions} video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} learning={learning} settings={appearance.settings} updateSettings={appearance.update} settingsStatus={appearance.status} roi={document?.analysis?.settings.roi ?? settings?.roi} onWord={selectWord} fullscreenTarget={workspace} />
       <div className="video-details"><div><h2 title={video.original_name}>{video.title ?? video.original_name}</h2><details className="video-file-details"><summary>Video details</summary><p>{video.width} × {video.height} <span>·</span> {formatTime(video.duration)} <span>·</span> {video.video_codec.toUpperCase()} {video.audio_codec && ` / ${video.audio_codec.toUpperCase()}`} <span>·</span> {(video.size_bytes / 1024 / 1024).toFixed(1)} MB</p></details>{video.source_url && <p>{video.uploader && `${video.uploader} · `}<a href={video.source_url} target="_blank" rel="noreferrer">Douyin source</a></p>}</div><span className="subtle-tag">{video.imported_from === 'douyin' ? 'Douyin · local copy' : 'Imported locally'}</span></div>
       {video.codec_warning && <p className="codec-warning" role="status">{video.codec_warning}</p>}
       <details className="processing-panel">

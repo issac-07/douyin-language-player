@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
 import type { LearningDocument, PlayerSettings, ProcessingSettings, SubtitleSegment, Video, WordToken } from '../types';
-import { activeSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from '../services/playback';
+import { activeSubtitle, clampSeek, formatTime, PLAYBACK_RATES, subtitleMediaTime } from '../services/playback';
 import { Icon } from './Icon';
 import { InteractiveSubtitleOverlay } from './InteractiveSubtitleOverlay';
 import { SubtitleAppearance } from './SubtitleAppearance';
 import { DEFAULT_PLAYER_SETTINGS } from '../hooks/usePlayerSettings';
 
-export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget, libraryActions }: {
-  libraryActions?: ReactNode; video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void;
+export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget, libraryActions, seekRequest }: {
+  seekRequest?:{time:number;nonce:number}|null; libraryActions?: ReactNode; video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void;
   learning?: LearningDocument | null; settings?: PlayerSettings; updateSettings?: (settings: PlayerSettings) => void; settingsStatus?: string;
   roi?: ProcessingSettings['roi']; onWord?: (token: WordToken) => void; fullscreenTarget?: RefObject<HTMLDivElement | null>;
 }) {
@@ -36,6 +36,7 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
     return () => observer.disconnect();
   }, []);
   const updateTime = (media: HTMLVideoElement, allowPause = true) => {
+    if (allowPause && media.seeking) return;
     const value = media.currentTime;
     if (allowPause && settings.auto_pause && !media.paused && !seeking.current && previous.current && value >= previous.current.end_time && value < previous.current.end_time + 1) {
       media.pause(); media.currentTime = previous.current.end_time;
@@ -48,7 +49,8 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
     if (allowPause && nextId === displayedSegment.current && now - lastUiRefresh.current < 100) return;
     displayedSegment.current = nextId;
     lastUiRefresh.current = now;
-    setTime(media.currentTime); onTimeChange?.(media.currentTime);
+    const uiTime=subtitleMediaTime(media.currentTime,segments);
+    setTime(uiTime); onTimeChange?.(uiTime);
   };
   const frameUpdate = useRef(updateTime);
   frameUpdate.current = updateTime;
@@ -74,10 +76,19 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
   const seek = (value: number) => {
     const media = element.current;
     if (media && ready) {
-      media.currentTime = clampSeek(value, media.duration);
-      setTime(media.currentTime);
-      onTimeChange?.(media.currentTime);
+      previous.current=undefined;
+      const target=clampSeek(value,media.duration);
+      media.currentTime = target;
+      setTime(target);
+      onTimeChange?.(target);
     }
+  };
+
+  useLayoutEffect(()=>{if(seekRequest)seek(seekRequest.time);},[seekRequest?.nonce,ready]);
+
+  const toggleSubtitleLayer=(key:'show_chinese'|'show_pinyin'|'show_translation')=>{
+    const visible=settings.show_all && settings[key] && (key!=='show_chinese' || settings.mode==='interactive');
+    updateSettings({...settings,...(!settings.show_all?{show_chinese:false,show_pinyin:false,show_translation:false}:{}),[key]:!visible,show_all:true,...(key==='show_chinese' && !visible?{mode:'interactive' as const}:{})});
   };
 
   const togglePlay = async () => {
@@ -122,7 +133,7 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
         ref={element} src={video.media_url} preload="metadata" playsInline aria-label={video.original_name}
         onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); setReady(true); }}
         onTimeUpdate={(event) => updateTime(event.currentTarget)}
-        onSeeking={() => { seeking.current = true; }}
+        onSeeking={() => { seeking.current = true; previous.current=undefined; }}
         onSeeked={(event) => { seeking.current = false; updateTime(event.currentTarget, false); }}
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
         onVolumeChange={(event) => { setVolume(event.currentTarget.volume); setMuted(event.currentTarget.muted); }}
@@ -157,7 +168,14 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
         </select>
         <button className="icon-button" aria-label="Fullscreen" title="Fullscreen (F)" onClick={() => void fullscreen()}><Icon name="expand" /></button>
       </div>
-      {libraryActions && <div className="player-library-actions">{libraryActions}</div>}
+      <div className="player-library-actions">
+        <div className="subtitle-display-controls" role="group" aria-label="Video subtitle display">
+          <button type="button" aria-label="Video Chinese" aria-pressed={settings.show_all && settings.show_chinese && settings.mode==='interactive'} onClick={()=>toggleSubtitleLayer('show_chinese')}>Chinese</button>
+          <button type="button" aria-label="Video pinyin" aria-pressed={settings.show_all && settings.show_pinyin} onClick={()=>toggleSubtitleLayer('show_pinyin')}>Pinyin</button>
+          <button type="button" aria-label="Video translation" aria-pressed={settings.show_all && settings.show_translation} onClick={()=>toggleSubtitleLayer('show_translation')}>Translate</button>
+        </div>
+        {libraryActions && <div className="player-delete-action">{libraryActions}</div>}
+      </div>
     </div>
     {appearanceOpen && <SubtitleAppearance settings={settings} update={updateSettings} status={settingsStatus} close={() => setAppearanceOpen(false)} />}
   </div>;

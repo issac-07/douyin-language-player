@@ -29,3 +29,8 @@ export function activeSubtitle<T extends TimedSegment>(segments: T[], currentTim
 export function transcriptSubtitle<T extends {start_time:number}>(segments:T[], currentTime:number):T|undefined {
  return segments.reduce<T|undefined>((latest,segment)=>segment.start_time<=currentTime && (!latest || segment.start_time>=latest.start_time)?segment:latest,undefined);
 }
+
+// Browser media timestamps can round a decimal boundary down by a fraction of a microsecond.
+export function subtitleMediaTime(time:number,segments:{start_time:number}[]):number {
+ return segments.find(segment=>Math.abs(segment.start_time-time)<0.000001)?.start_time??time;
+}

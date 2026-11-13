@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSubtitle, transcriptSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from './playback';
+import { activeSubtitle, transcriptSubtitle, subtitleMediaTime, clampSeek, formatTime, PLAYBACK_RATES } from './playback';
 import { errorMessage } from './api';
 
 describe('playback helpers', () => {
@@ -51,4 +51,13 @@ describe('transcript reading cursor',()=>{
   expect(transcriptSubtitle(segments,10)).toBe(segments[1]);
   expect(transcriptSubtitle(segments,3)).toBe(segments[0]);
  });
+});
+
+
+it('normalizes sub-microsecond media rounding without selecting a future video frame',()=>{
+ const segments=[{start_time:1.234567,end_time:2}];
+ const rounded=1.2345669999;
+ expect(transcriptSubtitle(segments,subtitleMediaTime(rounded,segments))).toBe(segments[0]);
+ expect(subtitleMediaTime(1.23,segments)).toBe(1.23);
+ expect(subtitleMediaTime(1.5,segments)).toBe(1.5);
 });

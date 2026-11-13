@@ -3,6 +3,7 @@ import type { PlayerSettings } from '../types';
 import { api } from '../services/api';
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
+  sentence_language:'vi',dictionary_language:'vi',
   mode: 'interactive', font_size: 20, pinyin_size: 12, translation_size: 13,
   vertical_offset: 0, horizontal_offset: 0, background_opacity: .35, text_color: '#ffffff', text_shadow: true,
   show_pinyin: true, show_chinese: true, show_translation: true, show_all: true, pause_on_word: false, auto_pause: false,
@@ -18,10 +19,12 @@ export function usePlayerSettings() {
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    api.playerSettings().then((value) => { if (alive.current && !changed.current) setSettings(value); }).catch((cause) => { if (alive.current) setStatus(cause.message); });
+    api.playerSettings().then((value) => { if (alive.current && !changed.current) setSettings({...value,dictionary_language:value.sentence_language??'vi',sentence_language:value.sentence_language??'vi'}); }).catch((cause) => { if (alive.current) setStatus(cause.message); });
     return () => { alive.current = false; };
   }, []);
   const update = (value: PlayerSettings) => {
+    const language=value.sentence_language??'vi';
+    value={...value,sentence_language:language,dictionary_language:language};
     changed.current = true; setSettings(value); setStatus('Saving appearance…');
     const version = ++generation.current;
     if (timer.current) clearTimeout(timer.current);

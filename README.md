@@ -1,5 +1,11 @@
 # Douyin Language Player — Phase 4
 
+**Language picker update:** a two-button English/Tiếng Việt switch with flags controls both sentence translations and selected-word meanings, including Vocabulary and empty-library views. Existing language choices follow the prior sentence language. See [behavior and validation](docs/LANGUAGE_PICKER_VALIDATION.md).
+
+**Display controls update:** equal-width word status buttons; independent transcript Pinyin/Translation toggles; Chinese/Pinyin/Translate controls beside a styled Delete button; distinct selected-word colors, themed scrollbars and a light/dark Subtitle appearance panel. See [usage and validation](docs/DISPLAY_CONTROLS_VALIDATION.md).
+
+**Word controls update:** three mutually exclusive New/Learning/Known buttons and a same-row Save/Saved toggle, with notes preserved on status changes and immediate unsave/resave. The speaker automatically uses Microsoft Xiaoxiao Online when exposed by the browser; no pronunciation/provider settings or model downloads. Paused transcript seeks remain synchronized. See [behavior, validation and limits](docs/WORD_CONTROLS_VALIDATION.md).
+
 **V2.1 UI / v2---Update-UI:** dedicated Vocabulary page with search/status filters/notes, one sun/moon theme switch, warmer light colors, import below the player, and transcript pinyin + Chinese + selected sentence translation with continuous reading highlight through gaps. See [changes, usage, validation and limits](docs/V2_1_UI_VALIDATION.md).
 
 **V2 UI / v2---Update-UI:** shared Paper Studio light and warm cinema dark themes, video-left / transcript-word-summary-library-right watch layout, ruby pinyin without visible transcript timestamps, expandable editing/dictionary tools and local-Mandarin pronunciation when a compatible OS/browser voice is installed. No Mandarin voice is currently available in the tested Edge installation; the button explains that limitation. See [layout, tests, usage and limitations](docs/V2_UI_VALIDATION.md).

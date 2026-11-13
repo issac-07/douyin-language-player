@@ -6,6 +6,8 @@ export function InteractiveSubtitleOverlay({ active, language, settings, roi, wi
   active: SubtitleSegment; language?: LearningSegment; settings: PlayerSettings; roi: ProcessingSettings['roi'];
   width: number; height: number; stageWidth: number; stageHeight: number; onWord: (token: WordToken) => void;
 }) {
+  const hasLanguage = language?.text === active.text && language.revision === active.revision;
+  const tokens = hasLanguage ? language.tokens : [];
   const box = containRect(stageWidth, stageHeight, width, height);
   const content = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -23,8 +25,6 @@ export function InteractiveSubtitleOverlay({ active, language, settings, roi, wi
     if (content.current) observer.observe(content.current);
     return () => observer.disconnect();
   }, [box.width, box.height, settings.show_all, availableHeight]);
-  const hasLanguage = language?.text === active.text && language.revision === active.revision;
-  const tokens = hasLanguage ? language.tokens : [];
   const chinese = settings.show_chinese && settings.mode === 'interactive';
   const factor = Math.min(1, Math.max(.85, box.width / 360)) * fit;
   const x = Math.min(box.width - size.width / 2 - 4, Math.max(size.width / 2 + 4, box.width * (.5 + settings.horizontal_offset / 100)));

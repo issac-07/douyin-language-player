@@ -3,8 +3,8 @@ import type { DictionaryResult, LearningDocument, LearningSegment, SavedWord, Su
 import { transcriptSubtitle } from '../services/playback';
 import { WordSummary } from './WordSummary';
 
-function SubtitleRow({ segment, active, seek, save, remove, language, onWord, saveTranslation }: {
-  segment: SubtitleSegment; active: boolean; seek: (time: number) => void;
+function SubtitleRow({ segment, active, seek, save, remove, language, onWord, saveTranslation, showPinyin, showTranslation }: {
+  showPinyin:boolean;showTranslation:boolean; segment: SubtitleSegment; active: boolean; seek: (time: number) => void;
   save: (segment: SubtitleSegment, text: string, start: number, end: number) => Promise<void>;
   remove: (segment: SubtitleSegment) => Promise<void>;
   language?: LearningSegment; onWord: (word: WordToken) => void; saveTranslation: (segment: SubtitleSegment, text: string) => Promise<void>;
@@ -19,8 +19,8 @@ function SubtitleRow({ segment, active, seek, save, remove, language, onWord, sa
   const [translationEditing, setTranslationEditing] = useState(false);
   const [translation, setTranslation] = useState('');
   return <article className={`subtitle-row ${active ? 'active' : ''}`} data-testid="subtitle-row" data-source-text={segment.text} tabIndex={0} aria-current={active?'true':undefined} onClick={event=>{if(!(event.target as HTMLElement).closest('button,details,a,input,textarea,select'))seek(segment.start_time);}} onKeyDown={event=>{if(event.target===event.currentTarget && ['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();seek(segment.start_time);}}}>
-    {!editing && <div lang="zh" className="reading-sentence">{language?.text===segment.text ? language.tokens.map(token=>token.selectable ? <button className="transcript-word" key={token.start} onClick={()=>onWord(token)} aria-label={`Look up ${token.text} from transcript`}><ruby>{token.text}<rt>{token.pinyin.normalize('NFC')}</rt></ruby></button> : <span key={token.start}>{token.text}</span>) : segment.text}</div>}
-    {language && !editing && <p className="reading-translation" lang={language.translation.target_language==='en'?'en':'vi'}>{language.translation.text ?? (language.translation.status==='pending'?'Translating…':'Translation unavailable')}</p>}
+    {!editing && <div lang="zh" className="reading-sentence">{language?.text===segment.text ? language.tokens.map(token=>token.selectable ? <button className="transcript-word" key={token.start} onClick={()=>onWord(token)} aria-label={`Look up ${token.text} from transcript`}><ruby>{token.text}{showPinyin && <rt>{token.pinyin.normalize('NFC')}</rt>}</ruby></button> : <span key={token.start}>{token.text}</span>) : segment.text}</div>}
+    {showTranslation && language && !editing && <p className="reading-translation" lang={language.translation.target_language==='en'?'en':'vi'}>{language.translation.text ?? (language.translation.status==='pending'?'Translating…':'Translation unavailable')}</p>}
     <details className="row-tools"><summary aria-label="Subtitle tools">⋯</summary><button className="text-action" onClick={()=>seek(segment.start_time)}>Go to this sentence</button><small>{Math.round(segment.confidence*100)}% OCR confidence{segment.edited?' · edited':''}</small>
     {editing ? <form onSubmit={async (event) => {
       event.preventDefault(); setBusy(true); setError('');
@@ -55,6 +55,11 @@ export function Transcript({ document, currentTime, seek, save, remove, learning
   vocabulary: SavedWord[]; saveWord: (word: string, status: SavedWord['status'], notes: string) => Promise<void>; deleteWord: (id: string) => Promise<void>;
   saveTranslation: (segment: SubtitleSegment, text: string) => Promise<void>; retryTranslation: () => Promise<void>;
 }) {
+  const [display,setDisplay]=useState(()=>{
+    try{const value=JSON.parse(localStorage.getItem('dlp-transcript-display')??'{}');return {pinyin:value?.pinyin!==false,translation:value?.translation!==false};}
+    catch{return {pinyin:true,translation:true};}
+  });
+  useEffect(()=>{try{localStorage.setItem('dlp-transcript-display',JSON.stringify(display));}catch{}},[display]);
   const list=useRef<HTMLDivElement>(null);
   const activeId=transcriptSubtitle(document?.segments??[],currentTime)?.id;
   useEffect(()=>{
@@ -63,16 +68,19 @@ export function Transcript({ document, currentTime, seek, save, remove, learning
     const outer=parent.getBoundingClientRect(),inner=row.getBoundingClientRect();
     if(inner.top<outer.top)parent.scrollTop-=outer.top-inner.top;
     else if(inner.bottom>outer.bottom)parent.scrollTop+=inner.bottom-outer.bottom;
-  },[activeId,learning]);
+  },[activeId,learning,display]);
   return <aside className="learning-column" aria-label="Learning tools">
-    <section className="transcript-panel"><header className="transcript-heading"><h2>Transcript</h2><details className="transcript-tools"><summary aria-label="Transcript tools">⋯</summary>
+    <section className="transcript-panel"><header className="transcript-heading"><h2>Transcript</h2><div className="transcript-display-controls" role="group" aria-label="Transcript display">
+      <button type="button" aria-label="Transcript pinyin" aria-pressed={display.pinyin} onClick={()=>setDisplay(old=>({...old,pinyin:!old.pinyin}))}>Pinyin</button>
+      <button type="button" aria-label="Transcript translation" aria-pressed={display.translation} onClick={()=>setDisplay(old=>({...old,translation:!old.translation}))}>Translation</button>
+    </div><details className="transcript-tools"><summary aria-label="Transcript tools">⋯</summary>
     {document?.analysis && <div className="export-links"><a href={`/api/videos/${document.video_id}/export?format=json&analysis_id=${document.analysis.id}`} download>Export JSON</a><a href={`/api/videos/${document.video_id}/export?format=srt&analysis_id=${document.analysis.id}`} download>Export SRT</a></div>}
     <button className="text-action" onClick={()=>void retryTranslation()}>Retry sentence translations</button></details></header>
-    <div className="transcript-content" ref={list} tabIndex={0} role="region" aria-label="Transcript sentences">
-      {document?.segments.map(segment=><SubtitleRow key={`${document.analysis?.id}-${segment.id}-${segment.revision}`} segment={segment} active={segment.id===activeId} seek={seek} save={save} remove={remove} language={learning?.segments.find(item=>item.id===segment.id && item.revision===segment.revision && item.text===segment.text)} onWord={onWord} saveTranslation={saveTranslation}/>)}
+    <div className={`transcript-content ${display.pinyin?'':'pinyin-hidden'}`} ref={list} tabIndex={0} role="region" aria-label="Transcript sentences">
+      {document?.segments.map(segment=><SubtitleRow key={`${document.analysis?.id}-${segment.id}-${segment.revision}`} showPinyin={display.pinyin} showTranslation={display.translation} segment={segment} active={segment.id===activeId} seek={seek} save={save} remove={remove} language={learning?.segments.find(item=>item.id===segment.id && item.revision===segment.revision && item.text===segment.text)} onWord={onWord} saveTranslation={saveTranslation}/>)}
       {!document?.segments.length && <p className="reading-empty">{document?.analysis?'No subtitles detected. Check the selected region.':'Choose the subtitle region below the player to create your transcript.'}</p>}
     </div></section>
-    <WordSummary selection={selection} result={dictionary} error={dictionaryError} vocabulary={vocabulary} save={saveWord}/>
+    <WordSummary selection={selection} result={dictionary} error={dictionaryError} vocabulary={vocabulary} save={saveWord} remove={deleteWord}/>
 
     {library}
   </aside>;
