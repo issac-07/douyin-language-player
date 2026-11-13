@@ -10,6 +10,7 @@ function SubtitleRow({ segment, active, seek, save, remove, language, onWord, sa
   remove: (segment: SubtitleSegment) => Promise<void>;
   language?: LearningSegment; onWord: (word: WordToken) => void; saveTranslation: (segment: SubtitleSegment, text: string) => Promise<void>;
 }) {
+  const target = language?.translation.target_language === 'en' ? 'English' : 'Vietnamese';
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(segment.text);
   const [start, setStart] = useState(segment.start_time);
@@ -34,9 +35,9 @@ function SubtitleRow({ segment, active, seek, save, remove, language, onWord, sa
       setBusy(true); setError('');
       try { await remove(segment); } catch (cause) { setError((cause as Error).message); setBusy(false); }
     }}>Delete subtitle</button></div></>}
-    {language && <div className="transcript-translation"><small>{language.translation.status === 'manual' ? 'Your Vietnamese translation' : 'Vietnamese · local machine translation'}</small><p lang="vi">{language.translation.text ?? (language.translation.status === 'pending' ? 'Translating locally…' : 'Vietnamese translation unavailable.')}</p>{language.translation.error && <p className="error-text">{language.translation.error}</p>}
-      <button className="text-action" onClick={() => { setTranslation(language.translation.text ?? ''); setTranslationEditing(!translationEditing); }}>Edit Vietnamese translation</button>
-      {translationEditing && <form onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(''); try { await saveTranslation(segment, translation); setTranslationEditing(false); } catch (cause) { setError((cause as Error).message); } finally { setBusy(false); } }}><label className="sidebar-field">Vietnamese sentence translation<textarea lang="vi" aria-label="Vietnamese sentence translation" value={translation} onChange={(event) => setTranslation(event.target.value)} required maxLength={5000} rows={3} /></label><button className="secondary-button" disabled={busy}>Save translation</button></form>}
+    {language && <div className="transcript-translation"><small>{language.translation.status === 'manual' ? `Your ${target} translation` : `${target} · local machine translation`}</small><p lang={target === "English" ? "en" : "vi"}>{language.translation.text ?? (language.translation.status === 'pending' ? 'Translating locally…' : `${target} translation unavailable.`)}</p>{language.translation.error && <p className="error-text">{language.translation.error}</p>}
+      <button className="text-action" onClick={() => { setTranslation(language.translation.text ?? ''); setTranslationEditing(!translationEditing); }}>Edit {target} translation</button>
+      {translationEditing && <form onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(''); try { await saveTranslation(segment, translation); setTranslationEditing(false); } catch (cause) { setError((cause as Error).message); } finally { setBusy(false); } }}><label className="sidebar-field">{target} sentence translation<textarea lang={target === "English" ? "en" : "vi"} aria-label={`${target} sentence translation`} value={translation} onChange={(event) => setTranslation(event.target.value)} required maxLength={5000} rows={3} /></label><button className="secondary-button" disabled={busy}>Save translation</button></form>}
     </div>}
     {error && <p role="alert" className="error-text">{error}</p>}
   </article>;
@@ -55,11 +56,11 @@ export function Transcript({ document, currentTime, seek, save, remove, learning
   useEffect(() => { if (selection) setTab('dictionary'); }, [selection?.nonce]);
   return <aside className="learning-panel" aria-label="Learning tools">
     <div className="panel-tabs" role="tablist" aria-label="Learning panel">{(['transcript', 'dictionary', 'vocabulary'] as const).map((item) => <button key={item} role="tab" id={`${item}-tab`} aria-controls="learning-content" aria-selected={tab === item} onClick={() => setTab(item)}><Icon name={item === 'transcript' ? 'captions' : 'book'} size={15} />{item === 'transcript' ? 'Transcript' : item === 'dictionary' ? 'Dictionary' : 'Vocabulary'}</button>)}</div>
-    <div id="learning-content" role="tabpanel" aria-labelledby={`${tab}-tab`} className="panel-content transcript-content">
+    <div id="learning-content" role="tabpanel" tabIndex={0} aria-labelledby={`${tab}-tab`} className="panel-content transcript-content">
       <span className="panel-counter">{tab === 'transcript' ? 'SUBTITLES' : tab === 'dictionary' ? 'WORD DETAILS' : 'SAVED WORDS'}<span>{tab === 'transcript' ? document?.segments.length ?? 0 : tab === 'vocabulary' ? vocabulary.length : 'EN'}</span></span>
       {tab === 'transcript' ? <>
         {document?.analysis && <div className="export-links"><a href={`/api/videos/${document.video_id}/export?format=json&analysis_id=${document.analysis.id}`} download>Export JSON</a><a href={`/api/videos/${document.video_id}/export?format=srt&analysis_id=${document.analysis.id}`} download>Export SRT</a></div>}
-        {learning?.segments.some((segment) => ['failed', 'unavailable'].includes(segment.translation.status)) && <button className="text-action" onClick={() => void retryTranslation()}>Retry Vietnamese translations</button>}
+        {learning?.segments.some((segment) => ['failed', 'unavailable'].includes(segment.translation.status)) && <button className="text-action" onClick={() => void retryTranslation()}>Retry sentence translations</button>}
         {document?.segments.map((segment) => <SubtitleRow key={`${document.analysis?.id}-${segment.id}-${segment.revision}`} segment={segment} active={segment.start_time <= currentTime && currentTime < segment.end_time} seek={seek} save={save} remove={remove} language={learning?.segments.find((item) => item.id === segment.id && item.revision === segment.revision && item.text === segment.text)} onWord={onWord} saveTranslation={saveTranslation} />)}
         {!document?.segments.length && <div className="learning-empty"><span className="empty-tool-icon"><Icon name="captions" size={28} /></span><h3>{document?.analysis ? 'No subtitles detected.' : 'Every sentence, a small step.'}</h3><p>{document?.analysis ? 'Check the preview and tighten the region around the Chinese text, then rerun OCR. Blank regions can correctly return no subtitles.' : 'Choose the Chinese subtitle region below the player, then select Analyze Video. Your transcript will appear here.'}</p></div>}
       </> : tab === 'dictionary' ? <DictionaryPanel selection={selection} result={dictionary} error={dictionaryError} vocabulary={vocabulary} save={saveWord} /> : <VocabularyPanel words={vocabulary} save={saveWord} remove={deleteWord} onWord={onWord} />}

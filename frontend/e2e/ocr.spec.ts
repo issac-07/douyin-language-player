@@ -13,6 +13,7 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await page.getByLabel('Choose MP4 file').setInputFiles(fixture);
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
   const canvas = page.getByTestId('roi-canvas');
   await expect(canvas).toBeVisible();
   await canvas.scrollIntoViewIfNeeded();
@@ -41,14 +42,35 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   for (const [name, value] of Object.entries({ x: '.05', y: '.60', width: '.90', height: '.30' })) {
     await page.getByLabel(`Region ${name}`, { exact: true }).fill(value);
   }
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
   await page.getByLabel('Samples / second').fill('2');
-  await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
+  await page.getByLabel('OCR controls', { exact: true }).selectOption('advanced');
+  await page.getByLabel('Processing mode', { exact: true }).selectOption('balanced');
+  await page.getByLabel('Inference backend', { exact: true }).selectOption('auto');
+  await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'completed', { timeout: 60_000 });
+  await expect(page.getByTestId('ocr-device')).toContainText('Actual: ort (4 threads)');
+  await expect(page.getByTestId('ocr-device')).toContainText('Fallback: none');
   const rows = page.getByTestId('subtitle-row');
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText('今天我们一起去吃饭');
   await expect(rows.nth(1)).toContainText('你在干什么？');
   await expect(rows.nth(2)).toContainText('我不知道发生了什么');
+  // Subtitle selection must still update when coarse timeupdate is suppressed.
+  await page.getByRole('slider', { name: 'Seek video' }).fill('.3');
+  await page.evaluate(async () => {
+    const media = document.querySelector('video')! as HTMLVideoElement & { testBlock?: (event: Event) => void };
+    media.testBlock = (event) => event.stopImmediatePropagation();
+    media.addEventListener('timeupdate', media.testBlock, true);
+    await media.play();
+  });
+  await expect(page.getByTestId('interactive-overlay')).toContainText('今天', { timeout: 2000 });
+  await page.evaluate(() => {
+    const media = document.querySelector('video')! as HTMLVideoElement & { testBlock?: (event: Event) => void };
+    media.pause();
+    if (media.testBlock) media.removeEventListener('timeupdate', media.testBlock, true);
+    delete media.testBlock;
+  });
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
   await expect.poll(async () => (await page.getByTestId('interactive-overlay').locator('[data-word-text], .subtitle-punctuation').allTextContents()).join('')).toBe('今天我们一起去吃饭');
   await page.getByRole('slider', { name: 'Seek video' }).fill('2.5');
@@ -63,8 +85,8 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await page.getByRole('button', { name: 'Save subtitle', exact: true }).click();
   await expect(rows.first()).toContainText('今天我们一起去吃饭！');
   await expect(rows.first()).toContainText('edited');
-  await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
-  await expect(page.getByText('Loaded cached subtitles, including your corrections. No OCR rerun was needed.')).toBeVisible();
+  await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
+  await expect(page.getByText('Opened saved subtitles.')).toBeVisible();
   for (const format of ['JSON', 'SRT']) {
     const downloading = page.waitForEvent('download');
     await page.getByRole('link', { name: `Export ${format}` }).click();
@@ -77,7 +99,7 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText('今天我们一起去吃饭！');
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
-  await page.getByRole('button', { name: 'Rerun OCR', exact: true }).click();
+  await page.getByRole('button', { name: 'Scan OCR again', exact: true }).click();
   await page.getByRole('button', { name: 'Cancel analysis', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'cancelled');
   await expect(rows.first()).toContainText('今天我们一起去吃饭！');
@@ -87,7 +109,7 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await expect(page.getByRole('heading', { name: 'second-video.mp4' })).toBeVisible();
   await expect(rows).toHaveCount(0);
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
-  await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
+  await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await page.locator('.recent-video').filter({ hasText: 'mandarin-test.mp4' }).click();
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
   await expect(rows.first()).toContainText('今天我们一起去吃饭！');

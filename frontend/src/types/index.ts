@@ -12,11 +12,39 @@ export interface Video {
   created_at: string;
   media_url: string;
   codec_warning: string | null;
+  title?: string | null;
+  source_url?: string | null;
+  uploader?: string | null;
+  imported_from?: string;
+}
+
+export interface URLImportJob {
+  id: string;
+  input_url: string;
+  canonical_url: string | null;
+  status: 'pending' | 'resolving' | 'downloading' | 'validating' | 'importing' | 'completed' | 'failed' | 'cancelled';
+  bytes_downloaded: number;
+  total_bytes: number | null;
+  attempt: number;
+  max_attempts: number;
+  metadata: { title: string | null; uploader: string | null; duration: number | null } | null;
+  video: Video | null;
+  reused: boolean;
+  error: string | null;
+  error_code?: string | null;
+  error_operation?: string | null;
+  upstream_http_status?: number | null;
+  extractor_version?: string | null;
+  diagnostics?: { operation: string; event: string; category: string | null; http_status: number | null; host: string | null; endpoint: string | null; exception_type: string | null; upstream_reason: string | null }[];
+  conversion: string;
+  elapsed_seconds: number;
+  analysis_message: string | null;
 }
 
 export interface ProcessingSettings {
   roi: { x: number; y: number; width: number; height: number };
   sample_fps: number;
+  performance?: { backend: 'auto' | 'cpu' | 'intel-gpu'; mode: 'accurate' | 'balanced' | 'fast'; cpu_threads: 2 | 4 | 8; cpu_runtime: 'ort' | 'openvino-cpu'; gpu_requests?: 1 | 2 | 4; refine_timing?: boolean };
 }
 
 export interface Health {
@@ -39,6 +67,7 @@ export interface SubtitleSegment {
 }
 
 export interface AnalysisJob {
+  stage?: string; started_at?: string | null; updated_at?: string | null; stage_completed?: number; stage_total?: number | null;
   id: string;
   video_id: string;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
@@ -48,8 +77,9 @@ export interface AnalysisJob {
   error: string | null;
   engine_version: string;
   timestamp_uncertainty: number;
+  execution?: { requested_backend?: string; actual_backend?: string; threads?: number | null; decoder?: string; reuse?: string; fallback?: boolean; stages?: Record<string, unknown> };
   metrics: {
-    frames_processed: number; ocr_calls: number; reused_frames: number;
+    refinement_frames?: number; frames_processed: number; ocr_calls: number; reused_frames: number;
     total_seconds: number; inference_seconds: number;
     unique_segments: number; average_confidence: number;
   };
@@ -62,13 +92,14 @@ export interface SubtitleDocument {
 }
 
 export interface WordToken { text: string; start: number; end: number; pinyin: string; selectable: boolean }
-export interface Translation { status: 'pending' | 'completed' | 'failed' | 'unavailable' | 'manual'; text: string | null; model: string | null; error: string | null; seconds: number | null }
+export interface Translation { target_language?: "en" | "vi"; status: 'pending' | 'completed' | 'failed' | 'unavailable' | 'manual'; text: string | null; model: string | null; error: string | null; seconds: number | null }
 export interface LearningSegment { id: string; revision: number; text: string; tokens: WordToken[]; translation: Translation }
-export interface LearningDocument { video_id: string; analysis_id: string | null; segments: LearningSegment[]; dictionary_available: boolean }
+export interface LearningDocument { target_language?: "en" | "vi"; video_id: string; analysis_id: string | null; segments: LearningSegment[]; dictionary_available: boolean }
 export interface DictionaryEntry { traditional: string; simplified: string; pinyin: string; meanings: string[] }
-export interface DictionaryResult { word: string; entries: DictionaryEntry[]; available: boolean; source: string; language: string; license: string }
+export interface DictionaryResult { parts?: DictionaryEntry[]; translation?: Translation | null; word: string; entries: DictionaryEntry[]; available: boolean; source: string; language: string; license: string }
 export interface SavedWord { id: string; word: string; pinyin: string; entries: DictionaryEntry[]; status: 'new' | 'learning' | 'known'; notes: string; updated_at: string }
 export interface PlayerSettings {
+  sentence_language?: "en" | "vi"; dictionary_language?: "en" | "vi";
   mode: 'interactive' | 'minimal'; font_size: number; pinyin_size: number; translation_size: number;
   vertical_offset: number; horizontal_offset: number; background_opacity: number; text_color: string; text_shadow: boolean;
   show_pinyin: boolean; show_chinese: boolean; show_translation: boolean; show_all: boolean; pause_on_word: boolean; auto_pause: boolean;

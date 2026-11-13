@@ -52,3 +52,31 @@ def test_long_uncertain_gap_does_not_join_later_occurrence():
 
 def test_normalization_keeps_chinese_digits_and_removes_punctuation():
     assert normalized("今天 ２０２６ 年！\n你好？") == "今天2026年你好"
+
+
+@pytest.mark.parametrize('before,after', [
+    ('我喜欢你', '我不喜欢你'), ('我不喜欢你', '我喜欢你'),
+    ('今天一共100元', '今天一共1000元'), ('今天去北京', '今天去南京'),
+    ('今天见李明', '今天见李小明'),
+])
+def test_confident_insertions_deletions_numbers_and_names(before, after):
+    segments = detect([(0, before, .99), (.5, after, .99)])
+    assert [s.text for s in segments] == [before, after]
+    assert segments[0].end_time == segments[1].start_time == .5
+
+
+def test_transient_extra_line_is_rejected_but_confirmed_line_keeps_first_timestamp():
+    base = '今天我们一起去吃饭'
+    extra = '饼\n' + base
+    transient = detect([(0, base, .99), (.5, extra, .97), (1, base, .99)])
+    assert [s.text for s in transient] == [base]
+    confirmed = detect([(0, base, .99), (.5, extra, .97), (1, extra, .97)])
+    assert [s.text for s in confirmed] == [base, extra]
+    assert confirmed[1].start_time == .5
+
+
+def test_repeated_moderate_confidence_negation_keeps_first_timestamp():
+    values = [(0, '我喜欢你', .9), (.5, '我喜欢你', .9), (1, '我不喜欢你', .9), (1.5, '我不喜欢你', .9)]
+    segments = detect(values)
+    assert [s.text for s in segments] == ['我喜欢你', '我不喜欢你']
+    assert segments[1].start_time == 1

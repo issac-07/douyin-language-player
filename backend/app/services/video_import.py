@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
 from uuid import uuid4
+from contextlib import nullcontext
 
 from fastapi import HTTPException, UploadFile
 
@@ -15,10 +16,10 @@ from app.models.schemas import ImportResult, Video
 from app.services.repository import Repository
 
 
-def probe_video(path: Path, executable: str) -> dict:
+def probe_video(path: Path, executable: str, *, require_mp4: bool = True) -> dict:
     try:
         result = subprocess.run(
-            [executable, "-v", "error", "-protocol_whitelist", "file,pipe", "-show_format", "-show_streams", "-of", "json", str(path)],
+            [executable, "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,mpegts,avi,flv,ogg", "-show_format", "-show_streams", "-of", "json", str(path)],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
@@ -28,7 +29,7 @@ def probe_video(path: Path, executable: str) -> dict:
         raise HTTPException(422, "Video inspection timed out. Try a smaller or repaired MP4 file.") from exc
     try:
         metadata = json.loads(result.stdout)
-        if result.returncode or "mp4" not in metadata["format"]["format_name"].split(","):
+        if result.returncode or (require_mp4 and "mp4" not in metadata["format"]["format_name"].split(",")):
             raise ValueError("Not an MP4")
         streams = metadata["streams"]
         video = next(s for s in streams if s.get("codec_type") == "video" and not s.get("disposition", {}).get("attached_pic"))
@@ -46,12 +47,13 @@ def probe_video(path: Path, executable: str) -> dict:
             width, height = height, width
         return dict(duration=duration, width=width, height=height, fps=fps,
                     video_codec=video.get("codec_name", "unknown"),
+                    pixel_format=video.get("pix_fmt"),
                     audio_codec=audio.get("codec_name", "unknown") if audio else None)
     except (ValueError, KeyError, StopIteration, TypeError) as exc:
         raise HTTPException(422, "This file is not a readable MP4 video. Export it as MP4 with H.264 video and AAC audio, then import again.") from exc
 
 
-def import_video(upload: UploadFile, settings: Settings, repository: Repository) -> ImportResult:
+def import_video(upload: UploadFile, settings: Settings, repository: Repository, *, check=lambda: None, publication_guard=nullcontext, on_import=None) -> ImportResult:
     # Never use the supplied filename as a filesystem path.
     name = (upload.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
     if not name.lower().endswith(".mp4"):
@@ -66,6 +68,7 @@ def import_video(upload: UploadFile, settings: Settings, repository: Repository)
         with tempfile.NamedTemporaryFile(dir=settings.media_dir, suffix=".upload", delete=False) as target:
             staged = Path(target.name)
             while chunk := upload.file.read(1024 * 1024):
+                check()
                 total += len(chunk)
                 if total > settings.max_upload_bytes:
                     raise HTTPException(413, f"Video exceeds the {settings.max_upload_bytes // (1024 * 1024)} MB upload limit.")
@@ -78,7 +81,12 @@ def import_video(upload: UploadFile, settings: Settings, repository: Repository)
         digest = fingerprint.hexdigest()
         existing = repository.by_hash(digest)
         if existing and (settings.media_dir / f"{existing.id}.mp4").is_file():
-            return ImportResult(video=existing, reused=True)
+            with publication_guard():
+                check()
+                result = ImportResult(video=existing, reused=True)
+                if on_import: on_import(result)
+                return result
+        check()
         metadata = probe_video(staged, settings.ffprobe)
         video_id = existing.id if existing else uuid4()
         warning = None
@@ -89,14 +97,18 @@ def import_video(upload: UploadFile, settings: Settings, repository: Repository)
             created_at=datetime.now(timezone.utc), media_url=f"/api/videos/{video_id}/media",
             codec_warning=warning, **metadata,
         )
-        candidate = settings.media_dir / f"{video_id}.mp4"
-        staged.replace(candidate)
-        staged = None
-        saved = repository.add(video)
-        if saved.id != video_id:
-            candidate.unlink(missing_ok=True)
-        candidate = None
-        return ImportResult(video=saved, reused=saved.id != video_id or existing is not None)
+        with publication_guard():
+            check()
+            candidate = settings.media_dir / f"{video_id}.mp4"
+            staged.replace(candidate)
+            staged = None
+            saved = repository.add(video)
+            if saved.id != video_id:
+                candidate.unlink(missing_ok=True)
+            candidate = None
+            result = ImportResult(video=saved, reused=saved.id != video_id or existing is not None)
+            if on_import: on_import(result)
+            return result
     finally:
         if staged:
             staged.unlink(missing_ok=True)

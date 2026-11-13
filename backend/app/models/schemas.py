@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -19,10 +20,22 @@ class ROI(BaseModel):
         return self
 
 
+class OCRPerformance(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    backend: Literal['auto', 'cpu', 'intel-gpu'] = 'auto'
+    mode: Literal['accurate', 'balanced', 'fast'] = 'balanced'
+    cpu_threads: Literal[2, 4, 8] = 4
+    cpu_runtime: Literal['ort', 'openvino-cpu'] = 'ort'
+    gpu_requests: Literal[1, 2, 4] = Field(default=1, exclude_if=lambda value: value == 1)
+    refine_timing: bool = Field(default=False, exclude_if=lambda value: not value)
+
+
 class ProcessingSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     roi: ROI = Field(default_factory=ROI)
     sample_fps: float = Field(default=2.0, ge=0.25, le=10)
+    # Absent on legacy records: retain their exact serialized settings/cache key.
+    performance: OCRPerformance | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class Video(BaseModel):
@@ -39,6 +52,12 @@ class Video(BaseModel):
     created_at: datetime
     media_url: str
     codec_warning: str | None = None
+    pixel_format: str | None = None
+    title: str | None = None
+    source_url: str | None = None
+    source_id: str | None = None
+    uploader: str | None = None
+    imported_from: str = "local"
 
 
 class ImportResult(BaseModel):
@@ -61,6 +80,10 @@ class AnalysisRequest(BaseModel):
 
 
 class AnalysisMetrics(BaseModel):
+    refinement_frames: int = 0
+    refinement_reused_frames: int = 0
+    refinement_seconds: float = 0
+    pipeline_wait_seconds: float = 0
     frames_processed: int = 0
     ocr_calls: int = 0
     reused_frames: int = 0
@@ -68,6 +91,11 @@ class AnalysisMetrics(BaseModel):
     total_seconds: float = 0
     unique_segments: int = 0
     average_confidence: float = 0
+    initialization_seconds: float = 0
+    decode_seconds: float = 0
+    change_detection_seconds: float = 0
+    merge_seconds: float = 0
+    database_seconds: float = 0
 
 
 class AnalysisJob(BaseModel):
@@ -79,11 +107,17 @@ class AnalysisJob(BaseModel):
     status: JobStatus = JobStatus.PENDING
     created_at: datetime
     completed_at: datetime | None = None
+    stage: str = "queued"
+    started_at: datetime | None = None
+    updated_at: datetime | None = None
+    stage_completed: int = 0
+    stage_total: int | None = None
     progress: float = 0
     total_frames: int
     error: str | None = None
     metrics: AnalysisMetrics = Field(default_factory=AnalysisMetrics)
     timestamp_uncertainty: float
+    execution: dict = Field(default_factory=dict)
 
 
 class AnalysisStarted(BaseModel):

@@ -17,6 +17,8 @@ export function DictionaryPanel({ selection, result, error, vocabulary, save }: 
       <div className="dictionary-word" lang="zh">{selection.word}</div><p className="dictionary-pinyin" lang="zh-Latn">{selection.pinyin || result?.entries[0]?.pinyin}</p>
       {error && <p className="error-text" role="alert">{error}</p>}
       {!result && !error && <p role="status">Looking up the local dictionary…</p>}
+      {result?.translation && <div><strong>Tiếng Việt · dịch máy trực tiếp từ từ Trung (không phải định nghĩa CC-CEDICT)</strong><p>{result.translation.text ?? (result.translation.status === 'pending' ? 'Translating locally…' : result.translation.error ?? 'Unavailable')}</p><small>Từ đứng riêng có thể thiếu ngữ cảnh, đặc biệt với tên riêng.</small></div>}
+      {result?.parts && result.parts.length > 0 && <div><strong>Không có mục từ nguyên cụm. Các mục từ thành phần đã xác minh:</strong><ul>{result.parts.map((part, i) => <li key={i}>{part.simplified} ({part.pinyin}): {part.meanings.join('; ')}</li>)}</ul><p>Không ghép các nghĩa này thành nghĩa chắc chắn của cụm hoặc tên riêng.</p></div>}
       {result?.entries.map((entry, index) => <div className="dictionary-entry" key={index}><span lang="zh-Latn">{entry.pinyin}</span>{entry.traditional !== entry.simplified && <span lang="zh" className="dictionary-traditional">{entry.traditional}</span>}<ul>{entry.meanings.map((meaning, number) => <li key={number}>{meaning}</li>)}</ul></div>)}
       {result && !result.available && <p>The local dictionary is unavailable. Install the language resources described in the README and restart the backend.</p>}
       {result?.available && result.entries.length === 0 && <p>No CC-CEDICT entry was found for this exact word. You can still save the original word with your own notes.</p>}
@@ -32,7 +34,7 @@ export function DictionaryPanel({ selection, result, error, vocabulary, save }: 
         {message && <p role="status">{message}</p>}
       </form>
     </>}
-    <p className="dictionary-attribution"><a href="https://www.mdbg.net/chinese/dictionary?page=cedict" target="_blank" rel="noreferrer">CC-CEDICT contributors / MDBG</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>. Definitions are English; the in-video Vietnamese line is a sentence translation.</p>
+    <p className="dictionary-attribution"><a href="https://www.mdbg.net/chinese/dictionary?page=cedict" target="_blank" rel="noreferrer">CC-CEDICT contributors / MDBG</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>. Verified definitions are English; optional Vietnamese word translations and English/Vietnamese sentence translations are machine-generated separately.</p>
   </details>;
 }
 

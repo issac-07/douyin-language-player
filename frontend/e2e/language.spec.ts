@@ -10,10 +10,11 @@ async function openLanguageVideo(page: Page, filename: string) {
   await page.getByLabel('Choose MP4 file').setInputFiles(path.join(root, 'data/fixtures', filename));
   await expect(page.getByRole('heading', { name: filename })).toBeVisible();
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
   await page.getByLabel('Samples / second').fill('2');
-  const rerun = page.getByRole('button', { name: 'Rerun OCR', exact: true });
+  const rerun = page.getByRole('button', { name: 'Scan OCR again', exact: true });
   if (await rerun.count()) await rerun.click();
-  else await page.getByRole('button', { name: 'Analyze Video', exact: true }).click();
+  else await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'completed', { timeout: 60_000 });
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay', { timeout: 45_000 });
@@ -70,7 +71,7 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await page.getByRole('button', { name: 'Subtitle appearance', exact: true }).click();
   await page.getByRole('slider', { name: 'Chinese font size', exact: true }).fill('28');
   await page.getByRole('slider', { name: 'Pinyin font size', exact: true }).fill('14');
-  await page.getByRole('slider', { name: 'Vietnamese font size', exact: true }).fill('15');
+  await page.getByRole('slider', { name: 'Sentence translation font size', exact: true }).fill('15');
   await page.getByRole('slider', { name: 'Subtitle vertical position', exact: true }).fill('-5');
   await page.getByRole('slider', { name: 'Subtitle background opacity', exact: true }).fill('.6');
   await expect(page.getByText('Appearance saved', { exact: true })).toBeVisible();
@@ -83,7 +84,7 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await page.getByRole('button', { name: 'Subtitle appearance', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'Chinese font size', exact: true })).toHaveValue('28');
   await expect(page.getByRole('slider', { name: 'Pinyin font size', exact: true })).toHaveValue('14');
-  await expect(page.getByRole('slider', { name: 'Vietnamese font size', exact: true })).toHaveValue('15');
+  await expect(page.getByRole('slider', { name: 'Sentence translation font size', exact: true })).toHaveValue('15');
   await expect(page.getByRole('slider', { name: 'Subtitle background opacity', exact: true })).toHaveValue('0.6');
   await page.getByLabel('Show generated subtitles', { exact: true }).uncheck();
   await expect(overlay).toHaveCount(0);
@@ -180,4 +181,87 @@ test('landscape, mobile sidebar, manual translation and wordbook persistence', a
   await checkBounds(page);
   await expect.poll(() => page.getByTestId('interactive-overlay').evaluate((element) => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
   await page.screenshot({ path: 'test-results/phase3-long-caption.png', fullPage: true });
+});
+
+
+test('v4.7 direct English, independent word language, presets and storage inventory', async ({ page }) => {
+  test.setTimeout(150_000);
+  await openLanguageVideo(page, 'mandarin-test.mp4');
+  await page.getByLabel('Sentence translation language', { exact: true }).selectOption('en');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/dinner|eat/i, {timeout: 60_000});
+  await expect(page.getByTestId('subtitle-vietnamese')).toHaveAttribute('lang', 'en');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByLabel('Sentence translation language', {exact:true})).toHaveValue('en');
+  await page.getByRole('slider', {name:'Seek video'}).fill('1');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/dinner|eat/i);
+  await page.getByLabel('Word meaning language', {exact:true}).selectOption('vi');
+  await page.getByTestId('interactive-overlay').getByRole('button', {name:'Look up 今天', exact:true}).click();
+  await expect(page.getByTestId('dictionary-panel')).toContainText('không phải định nghĩa CC-CEDICT');
+  await expect(page.getByTestId('dictionary-panel')).toContainText('today');
+  await page.getByText('Subtitle analysis settings', {exact:true}).click();
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('basic');
+  await page.getByLabel('OCR preset', {exact:true}).selectOption('speed');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
+  await expect(page.getByLabel('Samples / second')).toHaveValue('1');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
+  await page.getByLabel('Samples / second').fill('3');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('basic');
+  await expect(page.getByLabel('OCR preset', {exact:true})).toHaveValue('custom');
+  await page.getByLabel('OCR controls', {exact:true}).selectOption('advanced');
+  await expect(page.getByLabel('Samples / second')).toHaveValue('3');
+  await page.getByText('Local storage / Dung lượng lưu trữ', {exact:true}).click();
+  await page.getByRole('button', {name:'Check storage usage', exact:true}).click();
+  await expect(page.getByText('dictionary_and_models:', {exact:false})).toBeVisible();
+  await page.screenshot({path:'test-results/v47-language-storage.png', fullPage:true});
+  await page.getByLabel('Sentence translation language', {exact:true}).selectOption('vi');
+  await page.getByLabel('Word meaning language', {exact:true}).selectOption('en');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay', {timeout:45_000});
+  await page.waitForTimeout(500);
+});
+
+
+test('v4.8 OCR states keep diagnostics closed and cancellation reachable outside settings', async ({ page }) => {
+  const videos = await page.request.get('/api/videos').then(r => r.json());
+  let baseline;
+  for (const video of videos) {
+    const result = await page.request.get(`/api/videos/${video.id}/analyses/latest`).then(r => r.json());
+    if (result?.status === 'completed') { baseline = result; break; }
+  }
+  expect(baseline).toBeTruthy();
+  let shown = { ...baseline };
+  await page.addInitScript(id => localStorage.setItem('dlp-last-video', id), baseline.video_id);
+  await page.route(`**/api/videos/${baseline.video_id}/analyses/latest`, route => route.fulfill({json:shown}));
+  await page.route(`**/api/analysis-jobs/${baseline.id}`, route => route.fulfill({json:shown}));
+  await page.route(`**/api/analysis-jobs/${baseline.id}/cancel`, route => {
+    shown = {...shown, status:'cancelled', stage:'cancelled'};
+    return route.fulfill({json:shown});
+  });
+  for (const [status, stage] of [['pending','queued'], ['processing','initializing'], ['processing','reading_and_ocr'], ['processing','refining'], ['failed','failed'], ['cancelled','cancelled'], ['completed','completed']]) {
+    shown = {...baseline, status, stage, progress: status === 'completed' ? 1 : .98, started_at:new Date().toISOString(), updated_at:new Date().toISOString(), error:status === 'failed' ? 'A detailed test failure' : null};
+    await page.goto('/');
+    const panel = page.getByTestId('analysis-status');
+    await expect(panel).toHaveAttribute('data-status',status);
+    await expect(panel.locator('.processing-details')).not.toHaveAttribute('open');
+    await expect(page.getByTestId('ocr-device')).toBeHidden();
+    if (['pending','processing'].includes(status)) {
+      await expect(page.getByRole('button',{name:'Cancel analysis',exact:true})).toBeVisible();
+      const progress=page.getByLabel('OCR processing progress');
+      await expect(progress).toBeVisible();
+      if (stage !== 'reading_and_ocr') await expect(progress).not.toHaveAttribute('value');
+      else await expect(progress).toHaveAttribute('value','0.98');
+    } else await expect(page.getByLabel('OCR processing progress')).toHaveCount(0);
+    await panel.getByText('Processing details',{exact:true}).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('ocr-device')).toBeVisible();
+    await panel.getByText('Processing details',{exact:true}).click();
+  }
+  await page.screenshot({path:'test-results/v48-quiet-workspace.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({path:'test-results/v48-quiet-mobile.png',fullPage:true});
+  shown = {...baseline,status:'processing',stage:'refining'};
+  await page.goto('/');
+  await page.getByRole('button',{name:'Cancel analysis',exact:true}).click();
+  await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status','cancelled');
 });

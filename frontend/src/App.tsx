@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { StoragePanel } from './components/StoragePanel';
 import { Icon } from './components/Icon';
 import { OCRWorkspace } from './components/OCRWorkspace';
 import { api, uploadVideo } from './services/api';
 import { formatTime } from './services/playback';
 import type { Health, Video } from './types';
 import { usePlayerSettings } from './hooks/usePlayerSettings';
+import { DouyinImportPanel } from './components/DouyinImportPanel';
 
 export default function App() {
   const appearance = usePlayerSettings();
@@ -13,7 +15,9 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const uploadLock = useRef(false);
+  const libraryRevision = useRef(0);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -22,10 +26,13 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = async () => {
+    const revision = libraryRevision.current;
     setLoading(true); setError('');
     try {
       const [status, library] = await Promise.all([api.health(), api.videos()]);
-      setHealth(status); setVideos(library);
+      setHealth(status);
+      if (revision !== libraryRevision.current) return;
+      setVideos(library);
       let remembered: string | null = null;
       try { remembered = localStorage.getItem('dlp-last-video'); } catch { /* Browser storage can be disabled. */ }
       setSelected((current) => library.find((video) => video.id === current?.id) ?? library.find((video) => video.id === remembered) ?? library[0] ?? null);
@@ -44,11 +51,28 @@ export default function App() {
     uploadLock.current = true; setUploading(true); setProgress(0);
     try {
       const result = await uploadVideo(file, setProgress);
+      libraryRevision.current += 1;
       setVideos((current) => [result.video, ...current.filter((video) => video.id !== result.video.id)]);
       setSelected(result.video);
       setNotice(result.reused ? 'Opened the existing local copy. No duplicate was stored.' : 'Video imported and saved to your local library.');
     } catch (cause) { setError((cause as Error).message); }
     finally { uploadLock.current = false; setUploading(false); if (fileInput.current) fileInput.current.value = ''; }
+  };
+
+  const deleteSelected = async () => {
+    if (!selected || deleting || uploading) return;
+    const target = selected;
+    if (!window.confirm(`Delete "${target.title ?? target.original_name}" from this library? Its cached MP4, OCR results and subtitle corrections will be removed. Your original source file and saved vocabulary will be kept.`)) return;
+    setDeleting(true); setError(''); setNotice('');
+    try {
+      const result = await api.deleteVideo(target.id);
+      libraryRevision.current += 1;
+      const remaining = videos.filter((video) => video.id !== target.id);
+      setVideos(remaining); setSelected(remaining[0] ?? null);
+      try { localStorage.removeItem('dlp-last-video'); } catch { /* Optional storage. */ }
+      setNotice(result.media_cleanup_pending ? 'Video removed. A locked cache file still needs cleanup after playback stops.' : 'Video deleted from the library. Original source file and saved vocabulary were kept.');
+    } catch (cause) { setError((cause as Error).message); }
+    finally { setDeleting(false); }
   };
 
   return <div className="app-shell">
@@ -62,23 +86,29 @@ export default function App() {
         {loading && <p className="sidebar-empty">Loading your library…</p>}
         {!loading && videos.length === 0 && <p className="sidebar-empty">Your videos will appear here.<br />Start with a local MP4.</p>}
         {videos.map((video) => <button key={video.id} className={`recent-video ${selected?.id === video.id ? 'selected' : ''}`} onClick={() => setSelected(video)} aria-pressed={selected?.id === video.id}>
-          <span className="recent-icon"><Icon name="film" size={19} /></span><span className="recent-info"><strong title={video.original_name}>{video.original_name}</strong><small>{formatTime(video.duration)} · {video.width} × {video.height}</small></span>
+          <span className="recent-icon"><Icon name="film" size={19} /></span><span className="recent-info"><strong title={video.title ?? video.original_name}>{video.title ?? video.original_name}</strong><small>{formatTime(video.duration)} · {video.width} × {video.height}{video.imported_from === 'douyin' ? ' · Douyin' : ''}</small></span>
         </button>)}
       </div>
       <div className="local-note"><span className="status-dot" /><span>Local workspace<small>Files stay on this computer.</small></span></div>
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">PHASE 03 <span>·</span> WATCH & LEARN</span></header>
+      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">v4.8 <span>·</span> WATCH & LEARN</span></header>
       <main>
         <div className="page-heading"><div><div className="eyebrow">A LITTLE EVERY DAY</div><h1>Your next conversation<br className="mobile-break" /> starts here.</h1><p>Watch at your own pace. Make room for the words.</p></div><button className="secondary-button heading-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import video</button></div>
 
         <input ref={fileInput} id="video-file" className="sr-only" type="file" accept=".mp4,video/mp4" aria-label="Choose MP4 file" disabled={uploading} onChange={(event) => void importFile(event.target.files?.[0])} />
-        {error && <div className="alert error" role="alert">{error}<button className="text-button" onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
-        {notice && <div className="alert success" role="status"><Icon name="check" size={16} />{notice}</div>}
+        {error && <div className="alert error" role="alert">Action could not be completed.<details key={error}><summary>View error details</summary><p>{error}</p></details><button className="text-button" onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
+        {notice && <div className="alert success" role="status"><Icon name="check" size={16} /><span>{notice}</span><button className="text-button" aria-label="Dismiss notification" onClick={() => setNotice('')}>×</button></div>}
         {health && !health.ffprobe_available && <div className="alert error" role="alert">FFprobe is missing. Add FFmpeg to PATH and restart the backend before importing.</div>}
         {uploading && <div className="upload-progress" role="status"><span>{progress < 100 ? `Uploading your video · ${progress}%` : 'Upload received · inspecting the MP4…'}</span><progress max="100" value={progress} /></div>}
 
+        <DouyinImportPanel collapseToken={selected?.id} localBusy={uploading} onLocal={() => fileInput.current?.click()} onImported={(video, reused) => {
+          libraryRevision.current += 1;
+          setVideos((current) => [video, ...current.filter((item) => item.id !== video.id)]);
+          setSelected(video); setNotice(reused ? 'Opened the existing local copy. Cached analysis remains available.' : 'Douyin video imported into your local library.');
+        }} />
+        {selected && <div className="video-library-actions"><button className="text-action danger" disabled={deleting || uploading} onClick={() => void deleteSelected()}>{deleting ? 'Deleting…' : 'Delete selected video'}</button></div>}
         {selected ? <OCRWorkspace key={selected.id} video={selected} appearance={appearance} /> : <div className="workspace-grid">
           <section className="viewing-column" aria-label="Video workspace">
             <div className={`empty-player ${dragging ? 'dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void importFile(event.dataTransfer.files[0]); }}>
@@ -97,7 +127,8 @@ export default function App() {
             <div className="panel-footnote"><span className="status-dot" />{selected ? 'Video ready for local playback' : 'Import a video to begin'}</div>
           </aside>
         </div>}
-        <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video · Chinese OCR · Mandarin & Vietnamese</span></footer>
+        <StoragePanel />
+        <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video · Chinese OCR · Mandarin · English / Vietnamese</span></footer>
       </main>
     </div>
   </div>;

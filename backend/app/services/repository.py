@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
 
-from app.models.schemas import AnalysisJob, JobStatus, ProcessingSettings, SubtitleDocument, SubtitleSegment, Video
+from app.models.schemas import AnalysisJob, JobStatus, OCRPerformance, ProcessingSettings, SubtitleDocument, SubtitleSegment, Video
 
 
 class Repository:
@@ -60,13 +60,37 @@ class Repository:
                 CREATE TABLE IF NOT EXISTS translation_overrides (segment_id TEXT PRIMARY KEY,source_text TEXT NOT NULL,translation TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS vocabulary (word TEXT PRIMARY KEY,payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS player_settings (id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL);
-                PRAGMA user_version=3;
+                CREATE TABLE IF NOT EXISTS import_jobs (id TEXT PRIMARY KEY,payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS video_sources (canonical_url TEXT PRIMARY KEY,video_id TEXT NOT NULL REFERENCES videos(id),payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS english_translation_overrides (segment_id TEXT PRIMARY KEY,source_text TEXT NOT NULL,translation TEXT NOT NULL);
+                PRAGMA user_version=4;
             """)
 
     def list_videos(self) -> list[Video]:
         with self.connect() as db:
             rows = db.execute("SELECT payload FROM videos ORDER BY rowid DESC").fetchall()
         return [Video.model_validate_json(row["payload"]) for row in rows]
+
+    def remove_video(self, video_id: UUID, stage_media) -> bool:
+        """Remove video-owned data; caller stages media and restores on rollback."""
+        value = str(video_id)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM videos WHERE id=?', (value,)).fetchone():
+                return False
+            if db.execute("SELECT 1 FROM analyses WHERE video_id=? AND status IN ('pending','processing')", (value,)).fetchone():
+                raise ValueError('Cancel the active OCR job and wait for it to stop before deleting this video.')
+            db.execute('DELETE FROM translation_overrides WHERE segment_id IN (SELECT s.id FROM subtitle_segments s JOIN analyses a ON a.id=s.analysis_id WHERE a.video_id=?)', (value,))
+            db.execute('DELETE FROM english_translation_overrides WHERE segment_id IN (SELECT s.id FROM subtitle_segments s JOIN analyses a ON a.id=s.analysis_id WHERE a.video_id=?)', (value,))
+            db.execute('DELETE FROM subtitle_segments WHERE analysis_id IN (SELECT id FROM analyses WHERE video_id=?)', (value,))
+            db.execute('DELETE FROM active_analyses WHERE video_id=?', (value,))
+            db.execute('DELETE FROM analyses WHERE video_id=?', (value,))
+            db.execute('DELETE FROM video_sources WHERE video_id=?', (value,))
+            # Finished import history must not keep offering a removed video.
+            db.execute("DELETE FROM import_jobs WHERE json_extract(payload, '$.video.id')=?", (value,))
+            db.execute('DELETE FROM videos WHERE id=?', (value,))
+            stage_media()
+        return True
 
     def get_video(self, video_id: UUID) -> Video | None:
         with self.connect() as db:
@@ -90,7 +114,48 @@ class Repository:
     def get_settings(self, video_id: UUID) -> ProcessingSettings:
         with self.connect() as db:
             row = db.execute("SELECT payload FROM processing_settings WHERE video_id=?", (str(video_id),)).fetchone()
-        return ProcessingSettings.model_validate_json(row["payload"]) if row else ProcessingSettings()
+        # Only new/unconfigured videos receive the measured Balanced policy.
+        # Existing JSON without performance fields retains original CPU behavior.
+        return ProcessingSettings.model_validate_json(row["payload"]) if row else ProcessingSettings(performance=OCRPerformance())
+
+    def has_settings(self, video_id: UUID) -> bool:
+        with self.connect() as db:
+            return db.execute("SELECT 1 FROM processing_settings WHERE video_id=?", (str(video_id),)).fetchone() is not None
+
+    def save_import(self, job) -> None:
+        with self.connect() as db:
+            db.execute("INSERT INTO import_jobs(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", (str(job.id), job.model_dump_json()))
+
+    def get_import(self, job_id):
+        from app.models.imports import ImportJob
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM import_jobs WHERE id=?", (str(job_id),)).fetchone()
+        return ImportJob.model_validate_json(row['payload']) if row else None
+
+    def list_imports(self, limit=20):
+        from app.models.imports import ImportJob
+        with self.connect() as db:
+            rows = db.execute("SELECT payload FROM import_jobs ORDER BY rowid DESC LIMIT ?", (limit,)).fetchall()
+        return [ImportJob.model_validate_json(row['payload']) for row in rows]
+
+    def find_source(self, url):
+        with self.connect() as db:
+            row = db.execute("SELECT v.payload FROM video_sources s JOIN videos v ON v.id=s.video_id WHERE canonical_url=?", (url,)).fetchone()
+        return Video.model_validate_json(row['payload']) if row else None
+
+    def get_source(self, url):
+        from app.models.imports import SourceMetadata
+        with self.connect() as db:
+            row = db.execute("SELECT payload FROM video_sources WHERE canonical_url=?", (url,)).fetchone()
+        return SourceMetadata.model_validate_json(row['payload']) if row else None
+
+    def attach_source(self, video, source):
+        if not video.source_url:
+            video = video.model_copy(update=dict(title=source.title, source_url=source.canonical_url, source_id=source.video_id, uploader=source.uploader, imported_from='douyin'))
+        with self.connect() as db:
+            db.execute("UPDATE videos SET payload=? WHERE id=?", (video.model_dump_json(), str(video.id)))
+            db.execute("INSERT INTO video_sources(canonical_url,video_id,payload) VALUES(?,?,?) ON CONFLICT(canonical_url) DO UPDATE SET video_id=excluded.video_id,payload=excluded.payload", (source.canonical_url, str(video.id), source.model_dump_json()))
+        return video
 
     def save_settings(self, video_id: UUID, settings: ProcessingSettings) -> None:
         with self.connect() as db:

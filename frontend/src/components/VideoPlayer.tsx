@@ -27,6 +27,8 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const previous = useRef<SubtitleSegment | undefined>(undefined);
   const seeking = useRef(false);
+  const displayedSegment = useRef<string | undefined>(undefined);
+  const lastUiRefresh = useRef(0);
   const active = activeSubtitle(segments, time);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
@@ -39,8 +41,35 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
       media.pause(); media.currentTime = previous.current.end_time;
     }
     previous.current = activeSubtitle(segments, media.currentTime);
+    const nextId = previous.current?.id;
+    const now = performance.now();
+    // Inspect every presented frame, but avoid rebuilding a long transcript on
+    // every frame while the active sentence stays the same.
+    if (allowPause && nextId === displayedSegment.current && now - lastUiRefresh.current < 100) return;
+    displayedSegment.current = nextId;
+    lastUiRefresh.current = now;
     setTime(media.currentTime); onTimeChange?.(media.currentTime);
   };
+  const frameUpdate = useRef(updateTime);
+  frameUpdate.current = updateTime;
+  useEffect(() => {
+    const media = element.current;
+    if (!media) return;
+    let stopped = false;
+    let handle = 0;
+    const native = typeof media.requestVideoFrameCallback === 'function';
+    const tick = () => {
+      if (stopped) return;
+      if (!media.paused && !media.seeking) frameUpdate.current(media);
+      handle = native ? media.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
+    };
+    handle = native ? media.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      if (native) media.cancelVideoFrameCallback(handle);
+      else cancelAnimationFrame(handle);
+    };
+  }, [video.id]);
 
   const seek = (value: number) => {
     const media = element.current;

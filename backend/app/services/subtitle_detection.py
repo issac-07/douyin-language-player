@@ -27,6 +27,7 @@ class SubtitleDetector:
         self.segments: list[SubtitleSegment] = []
         self.current: list[OCRObservation] = []
         self.uncertain_since: float | None = None
+        self.pending: OCRObservation | None = None
 
     def _close(self, end: float):
         if not self.current:
@@ -48,6 +49,13 @@ class SubtitleDetector:
         self.uncertain_since = None
 
     def observe(self, observation: OCRObservation):
+        # A transient extra detected line must not split a stable caption. Confirm
+        # structural changes on the next observation, retaining its first timestamp.
+        if self.pending is not None:
+            pending, self.pending = self.pending, None
+            if observation.confidence >= .80 and normalized(observation.text) == normalized(pending.text):
+                self._close(pending.timestamp)
+                self.current.append(pending)
         if not observation.text.strip():
             # A confirmed disappearance separates even identical later sentences.
             self._close(self.uncertain_since if self.uncertain_since is not None else observation.timestamp)
@@ -62,14 +70,26 @@ class SubtitleDetector:
         if self.current:
             recent = max(self.current[-3:], key=lambda o: o.confidence)
             confident_change = (normalized(recent.text) != normalized(observation.text)
-                                and len(normalized(recent.text)) == len(normalized(observation.text))
                                 and recent.confidence >= 0.95 and observation.confidence >= 0.95)
+            if confident_change and recent.text.count('\n') != observation.text.count('\n') and same_subtitle(recent.text, observation.text):
+                self.pending = observation
+                return
+            if (not confident_change and observation.confidence >= .80
+                    and sum(normalized(o.text) == normalized(recent.text) for o in self.current[-3:]) >= 2
+                    and normalized(recent.text) != normalized(observation.text)
+                    and same_subtitle(recent.text, observation.text)):
+                self.pending = observation
+                return
             if confident_change or not same_subtitle(recent.text, observation.text) or observation.timestamp - self.current[-1].timestamp > self.period + 0.60:
                 self._close(self.uncertain_since if self.uncertain_since is not None else observation.timestamp)
         self.current.append(observation)
         self.uncertain_since = None
 
     def finish(self) -> list[SubtitleSegment]:
+        if self.pending is not None:
+            pending, self.pending = self.pending, None
+            self._close(pending.timestamp)
+            self.current.append(pending)
         if self.current:
             self._close(self.uncertain_since if self.uncertain_since is not None else self.current[-1].timestamp + self.period)
         return self.segments

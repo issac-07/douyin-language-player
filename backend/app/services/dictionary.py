@@ -21,4 +21,12 @@ class Dictionary:
         with closing(sqlite3.connect(f'{self.path.as_uri()}?mode=ro', uri=True)) as db:
             rows = db.execute('SELECT traditional,simplified,pinyin,meanings FROM entries WHERE simplified=? OR traditional=? LIMIT 50', (word, word)).fetchall()
         entries = [DictionaryEntry(traditional=t, simplified=s, pinyin=' '.join(to_tone(syllable) for syllable in p.split()), meanings=json.loads(m)) for t, s, p, m in rows]
-        return DictionaryResult(word=word, available=True, entries=entries)
+        parts = []
+        if not entries and len(word) > 1:
+            from app.services.chinese_processing import process_chinese
+            candidates = [t.text for t in process_chinese(word) if t.selectable and t.text != word]
+            if not candidates:
+                candidates = list(dict.fromkeys(word))
+            for part in candidates[:8]:
+                parts.extend(self.lookup(part).entries)
+        return DictionaryResult(word=word, available=True, entries=entries, parts=parts)

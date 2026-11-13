@@ -1,0 +1,23 @@
+# v4.5 — research before the next OCR changes
+
+Research date: 12 November 2026, Australia/Sydney. This release adds video deletion and visible version reporting. It does **not** claim a new OCR algorithm or GPU throughput improvement.
+
+## Findings and proposed experiments
+
+1. **Playback synchronization:** [MDN requestVideoFrameCallback](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback) exposes presented-video-frame timing through `mediaTime`. The current player uses `timeupdate`; the next experiment should update subtitle selection per presented frame with seek/pause/rate-change safeguards. This fixes display scheduling, not incorrect OCR timestamps.
+2. **Boundary refinement:** retain the user's 5 FPS coarse pass. When a subtitle transition is found, inspect additional original frames locally around that boundary and verify the same text before assigning an earlier start. This is our proposed design, not a guarantee from external documentation. Measure against manually reviewed first/last visible frames. Do not shift every sentence earlier by a guessed constant.
+3. **Text-change detection:** [OpenCV optical flow](https://docs.opencv.org/4.x/d4/dee/tutorial_optical_flow.html) can track local movement; [PySceneDetect](https://www.scenedetect.com/api/) detects scene/content changes. Neither establishes that Chinese subtitle text is unchanged. A proposed detector must examine OCR text regions, watch outside old boxes for added words/lines, and fall back to OCR on uncertainty. Check negation, single-character changes, disappearance, animated text and moving backgrounds. Current Fast saved zero calls in the checked job; retain it as experimental rather than claim validated speedup.
+4. **CPU/GPU overlap:** [OpenVINO inference requests](https://docs.openvino.ai/2026/openvino-workflow/running-inference/inference-request.html), [throughput hints](https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/high-level-performance-hints.html) and [streams/batching](https://docs.openvino.ai/2026/openvino-workflow/running-inference/optimize-inference/optimizing-throughput/advanced_throughput_options.html) support multiple asynchronous requests. Test bounded CPU prefetch, 1/2/4 GPU streams and recognition batches independently. Merely increasing streams while issuing blocking requests is insufficient. Each concurrent request needs its own input/output ownership; reorder completed observations by media timestamp before merging. Preserve cancellation and bound memory.
+5. **Compilation cost:** [OpenVINO GPU device guidance](https://docs.openvino.ai/2026/openvino-workflow/running-inference/inference-devices-and-modes/gpu-device.html) describes dynamic-shape kernel compilation/caching. OCR recognition widths vary, so record cold/first-shape/warm costs separately and test shape buckets only if preprocessing/text accuracy remain equivalent.
+
+## Acceptance for the next OCR release
+
+Use the same authorized MP4, ROI, models and **5 FPS** across comparisons. Report OCR time separately from translation, inference calls avoided, CPU/GPU utilization where measurable, memory and exact text/timing differences. Ground truth should include manually reviewed caption appearances. Target lower completion time and lower timing error; 100% utilization alone is not the success criterion. No unmeasured speedup is promised.
+
+## v4.5 library changes
+
+Previously there was no video deletion API or button. `Delete selected video` now requires confirmation, removes video-owned transcript/correction/source records and the application's cached MP4, and retains saved vocabulary, shared language caches and the original source file. Pending/running imports or OCR block deletion; users must wait/cancel first. A failed media staging operation rolls back database changes. If final unlink of an already-staged file is blocked, the response explicitly reports pending cache cleanup; no original source path is used.
+
+The UI badge shows **v4.5**; API/OpenAPI version is **0.4.5**. No database schema-version bump is needed. Tests must use isolated fixture libraries; no real user video should be deleted during validation.
+
+Validation: 164 backend tests passed (one optional OpenVINO-only test skipped in the CPU environment), 11 frontend tests passed, TypeScript/Vite build passed, and all nine Edge workflows passed, including cancel/confirm deletion and reload persistence. Tests ran in the existing a71b worktree with isolated data, reusing the original project's installed dependencies/resources. No real library video was deleted. The next OCR algorithm changes remain proposed research.

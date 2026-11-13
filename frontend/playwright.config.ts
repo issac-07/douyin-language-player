@@ -12,6 +12,7 @@ export default defineConfig({
     { name: 'phase1', testMatch: '**/player.spec.ts' },
     { name: 'phase2', testMatch: '**/ocr.spec.ts', dependencies: ['phase1'] },
     { name: 'phase3', testMatch: '**/language.spec.ts', dependencies: ['phase2'] },
+    { name: 'phase4', testMatch: '**/douyin.spec.ts', dependencies: ['phase3'] },
   ],
   timeout: 30_000,
   globalSetup: './e2e/setup.ts',
@@ -24,9 +25,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `"${python}" -m uvicorn app.main:app --app-dir "${path.join(root, 'backend')}" --host 127.0.0.1 --port 8011`,
+      command: `"${python}" -m uvicorn backend.tests.douyin_fixture:make_browser_app --factory --app-dir "${root}" --host 127.0.0.1 --port 8011`,
       url: 'http://127.0.0.1:8011/api/health',
-      env: { DLP_DATA_DIR: path.join(root, 'data', 'e2e', `run-${Date.now()}`), DLP_ALLOWED_ORIGINS: 'http://127.0.0.1:5174' },
+      env: { PYTHONPATH: path.join(root, 'backend'), DLP_DATA_DIR: path.join(root, 'data', 'e2e', `run-${Date.now()}`), DLP_ALLOWED_ORIGINS: 'http://127.0.0.1:5174' },
       reuseExistingServer: false,
     },
     {
