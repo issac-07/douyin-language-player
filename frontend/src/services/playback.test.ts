@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSubtitle, transcriptSubtitle, subtitleMediaTime, clampSeek, formatTime, PLAYBACK_RATES } from './playback';
+import { activeSubtitle, transcriptSubtitle, subtitleMediaTime, clampSeek, formatTime, formatDuration, PLAYBACK_RATES } from './playback';
 import { errorMessage } from './api';
 
 describe('playback helpers', () => {
@@ -60,4 +60,15 @@ it('normalizes sub-microsecond media rounding without selecting a future video f
  expect(transcriptSubtitle(segments,subtitleMediaTime(rounded,segments))).toBe(segments[0]);
  expect(subtitleMediaTime(1.23,segments)).toBe(1.23);
  expect(subtitleMediaTime(1.5,segments)).toBe(1.5);
+});
+
+describe('readable processing duration', () => {
+ it('uses minutes and seconds across boundaries', () => {
+  expect(formatDuration(330)).toBe('5m30s');
+  expect(formatDuration(300)).toBe('5m0s');
+  expect(formatDuration(59.9)).toBe('59s');
+  expect(formatDuration(60)).toBe('1m0s');
+  expect(formatDuration(3661)).toBe('1h1m1s');
+  expect(formatDuration(NaN)).toBe('0s');
+ });
 });

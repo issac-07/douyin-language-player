@@ -6,41 +6,47 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from starlette.responses import Response
 
 from app.api.videos import require_video
-from app.models.learning import DictionaryResult, LearningDocument, PlayerSettings, SavedWord, TranslationEdit, VocabularyInput
+from app.models.learning import TranslationModel, DictionaryResult, LearningDocument, PlayerSettings, SavedWord, TranslationEdit, VocabularyInput
 
 router = APIRouter(prefix='/api', tags=['language learning'])
 
 
+@router.get('/translation-models')
+def translation_models(request: Request):
+    from app.services.translation_models import MODELS
+    return [{'id': key, 'label': spec['label'], 'available': all(t.available for t in request.app.state.learning.model_translators[key].values())} for key, spec in MODELS.items()]
+
+
 @router.get('/videos/{video_id}/learning', response_model=LearningDocument)
-def learning(request: Request, video_id: UUID, target: Literal["vi", "en"] | None = None):
+def learning(request: Request, video_id: UUID, target: Literal["vi", "en"] | None = None, model: TranslationModel | None = None):
     require_video(request, video_id)
-    return request.app.state.learning.document(request.app.state.repository.document(video_id), target)
+    return request.app.state.learning.document(request.app.state.repository.document(video_id), target, model)
 
 
 @router.post('/videos/{video_id}/learning/retry', response_model=LearningDocument)
-def retry(request: Request, video_id: UUID, target: Literal["en", "vi"] | None = None):
+def retry(request: Request, video_id: UUID, target: Literal["en", "vi"] | None = None, model: TranslationModel | None = None):
     require_video(request, video_id)
     document = request.app.state.repository.document(video_id)
-    request.app.state.learning.retry(document, target)
-    return request.app.state.learning.document(document, target)
+    request.app.state.learning.retry(document, target, model)
+    return request.app.state.learning.document(document, target, model)
 
 
 @router.put('/videos/{video_id}/subtitles/{segment_id}/translation', response_model=LearningDocument)
-def translation_edit(request: Request, video_id: UUID, segment_id: UUID, body: TranslationEdit):
+def translation_edit(request: Request, video_id: UUID, segment_id: UUID, body: TranslationEdit, model: TranslationModel | None = None):
     target = body.target_language
     require_video(request, video_id)
     if not body.translation.strip():
         raise HTTPException(422, 'Translation cannot be empty.')
     if not request.app.state.learning.save_translation(video_id, segment_id, body):
         raise HTTPException(409, 'The subtitle changed. Reload before editing its translation.')
-    return request.app.state.learning.document(request.app.state.repository.document(video_id), target)
+    return request.app.state.learning.document(request.app.state.repository.document(video_id), target, model)
 
 
 @router.get('/dictionary', response_model=DictionaryResult)
-def dictionary(request: Request, word: str = Query(min_length=1, max_length=64), target: Literal['en', 'vi'] = 'en'):
+def dictionary(request: Request, word: str = Query(min_length=1, max_length=64), target: Literal['en', 'vi'] = 'en', model: TranslationModel | None = None):
     result = request.app.state.learning.dictionary.lookup(word)
     if target == 'vi':
-        result.translation = request.app.state.learning.translation(word, 'vi')
+        result.translation = request.app.state.learning.translation(word, 'vi', model)
         result.translation.target_language = 'vi'
     return result
 

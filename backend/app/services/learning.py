@@ -9,6 +9,7 @@ from app.models.learning import LearningDocument, LearningSegment, PlayerSetting
 from app.services.chinese_processing import VERSION, process_chinese
 from app.services.dictionary import Dictionary
 from app.services.translation import LocalTranslator
+from app.services.translation_models import MODELS, DEFAULT_MODEL
 
 
 def cache_key(text: str, version: str) -> str:
@@ -19,10 +20,16 @@ class LearningService:
     def __init__(self, repository, settings):
         self.repo = repository
         self.dictionary = Dictionary(settings.resource_dir)
-        self.translator = LocalTranslator(settings.resource_dir)
-        self.translators = {"vi": self.translator, "en": LocalTranslator(settings.resource_dir, "en")}
-        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='translation-vi')
-        self.pools = {'vi': self.pool, 'en': ThreadPoolExecutor(max_workers=1, thread_name_prefix='translation-en')}
+        self.model_translators = {}
+        for model_id in MODELS:
+            vi = LocalTranslator(settings.resource_dir, model_id=model_id)
+            self.model_translators[model_id] = {'vi': vi, 'en': LocalTranslator(settings.resource_dir, 'en', backend=vi.backend, model_id=model_id)}
+        self.translators = self.model_translators[DEFAULT_MODEL]
+        self.translator = self.translators['vi']
+        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='translation')
+        self.pools = {'vi': self.pool, 'en': self.pool}
+        self.loaded_model = None
+        self.requested_model = None
         self.lock = threading.RLock()
         self.scheduled = set()
         self.closing = False
@@ -45,31 +52,44 @@ class LearningService:
             return tokens
         return [WordToken.model_validate(token) for token in saved]
 
-    def translation(self, text, target="vi"):
-        translator = self.translators[target]
+    def translation(self, text, target="vi", model_id=None):
+        model_id = model_id or self.get_player_settings().translation_model
+        translator = self.model_translators[model_id][target]
         key = cache_key(text, translator.identity)
         with self.lock:
+            self.requested_model = model_id
             saved = self._get('translation_cache', key)
             if saved and saved['status'] != 'pending':
                 return Translation.model_validate(saved)
             if not translator.available:
-                return Translation(status='unavailable', model=translator.identity, error='Install the selected local translation model, then restart the backend.')
+                return Translation(status='unavailable', model=translator.identity, error=f'The selected model {MODELS[model_id]["label"]} is not installed. Install its local resources and restart the backend.')
             if key not in self.scheduled and not self.closing and len(self.scheduled) < 512:
                 self.scheduled.add(key)
                 self._put('translation_cache', key, Translation(status='pending', model=translator.identity).model_dump())
-                self.pools[target].submit(self._translate, key, text, translator)
+                self.pools[target].submit(self._translate, key, text, translator, model_id)
             return Translation(status='pending', model=translator.identity)
 
-    def _translate(self, key, text, translator):
+    def _translate(self, key, text, translator, model_id):
         try:
-            if not self.closing:
+            if not self.closing and self.requested_model == model_id:
+                if self.loaded_model != model_id:
+                    for other_id, pair in self.model_translators.items():
+                        if other_id != model_id:
+                            for other in pair.values():
+                                other.unload()
+                    self.loaded_model = model_id
+                if model_id == 'marian':
+                    for other in self.model_translators['marian'].values():
+                        if other is not translator:
+                            other.unload()
                 result = translator.translate(text)
                 self._put('translation_cache', key, result.model_dump())
         finally:
             with self.lock:
                 self.scheduled.discard(key)
 
-    def document(self, document, target=None):
+    def document(self, document, target=None, model_id=None):
+        model_id = model_id or self.get_player_settings().translation_model
         target = target or self.get_player_settings().sentence_language
         segments = []
         with self.repo.connect() as db:
@@ -78,14 +98,14 @@ class LearningService:
         for segment in document.segments:
             override = overrides.get(str(segment.id))
             translation = (Translation(status='manual', text=override['translation'])
-                           if override and override['source_text'] == segment.text else self.translation(segment.text, target))
+                           if override and override['source_text'] == segment.text else self.translation(segment.text, target, model_id))
             translation.target_language = target
             segments.append(LearningSegment(id=segment.id, revision=segment.revision, text=segment.text, tokens=self.tokens(segment.text), translation=translation))
-        return LearningDocument(video_id=document.video_id, analysis_id=document.analysis.id if document.analysis else None,
+        return LearningDocument(translation_model=model_id, model_label=MODELS[model_id]['label'], video_id=document.video_id, analysis_id=document.analysis.id if document.analysis else None,
                                 target_language=target, segments=segments, dictionary_available=self.dictionary.available)
 
-    def retry(self, document, target=None):
-        translator = self.translators[target or self.get_player_settings().sentence_language]
+    def retry(self, document, target=None, model_id=None):
+        translator = self.model_translators[model_id or self.get_player_settings().translation_model][target or self.get_player_settings().sentence_language]
         with self.repo.connect() as db:
             for segment in document.segments:
                 key = cache_key(segment.text, translator.identity)
@@ -140,5 +160,11 @@ class LearningService:
     def shutdown(self):
         with self.lock:
             self.closing = True
-        for pool in self.pools.values():
+        for pool in set(self.pools.values()):
             pool.shutdown(wait=True, cancel_futures=True)
+        for pair in self.model_translators.values():
+            if pair['vi'].backend:
+                pair['vi'].backend.close()
+            else:
+                for translator in pair.values():
+                    translator.unload()

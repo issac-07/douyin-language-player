@@ -1,4 +1,4 @@
-import type { AnalysisJob, DictionaryResult, Health, LearningDocument, PlayerSettings, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video, URLImportJob } from '../types';
+import type { TranslationModel, AnalysisJob, DictionaryResult, Health, LearningDocument, PlayerSettings, ProcessingSettings, SavedWord, SubtitleDocument, SubtitleSegment, Video, URLImportJob } from '../types';
 
 export function errorMessage(body: unknown): string {
   if (body && typeof body === 'object' && 'detail' in body) {
@@ -18,6 +18,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  translationModels: () => request<{id:TranslationModel;label:string;available:boolean}[]>('/api/translation-models'),
   ocrCapabilities: () => request<{openvino_cpu: boolean; intel_gpu: boolean; error: string | null}>("/api/ocr-capabilities"),
   storage: () => request<{ data_directory: string; groups: Record<string, {path: string; bytes: number}>; counts: Record<string, number>; reusable_database_bytes: number; videos: {id: string; name: string; bytes: number}[] }>('/api/storage'),
   cleanStorage: (kind: string) => request<{deleted_records: number; note: string}>('/api/storage/cleanup', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({kind}) }),
@@ -25,15 +26,15 @@ export const api = {
   importDouyin: (text: string, analyzeAfterImport: boolean, usePublicPage = false) => request<URLImportJob>('/api/imports/douyin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, analyze_after_import: analyzeAfterImport, use_public_page: usePublicPage }) }),
   urlImport: (id: string, signal?: AbortSignal) => request<URLImportJob>(`/api/imports/${id}`, { signal }),
   cancelImport: (id: string) => request<URLImportJob>(`/api/imports/${id}/cancel`, { method: 'POST' }),
-  learning: (id: string, signal?: AbortSignal, target = "vi") => request<LearningDocument>(`/api/videos/${id}/learning?target=${target}`, { signal }),
-  retryLearning: (id: string, target = "vi") => request<LearningDocument>(`/api/videos/${id}/learning/retry?target=${target}`, { method: 'POST' }),
-  dictionary: (word: string, signal?: AbortSignal, target = "en") => request<DictionaryResult>(`/api/dictionary?word=${encodeURIComponent(word)}&target=${target}`, { signal }),
+  learning: (id: string, signal?: AbortSignal, target = "vi", model = "hymt-1.8b-q8") => request<LearningDocument>(`/api/videos/${id}/learning?target=${target}&model=${model}`, { signal }),
+  retryLearning: (id: string, target = "vi", model = "hymt-1.8b-q8") => request<LearningDocument>(`/api/videos/${id}/learning/retry?target=${target}&model=${model}`, { method: 'POST' }),
+  dictionary: (word: string, signal?: AbortSignal, target = "en", model?: string) => request<DictionaryResult>(`/api/dictionary?word=${encodeURIComponent(word)}&target=${target}${model ? `&model=${model}` : ''}`, { signal }),
   vocabulary: () => request<SavedWord[]>('/api/vocabulary'),
   saveWord: (word: string, status: SavedWord['status'], notes: string) => request<SavedWord>('/api/vocabulary', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ word, status, notes }) }),
   deleteWord: async (id: string) => { const response = await fetch(`/api/vocabulary/${id}`, { method: 'DELETE' }); if (!response.ok) throw new Error(errorMessage(await response.json())); },
   playerSettings: () => request<PlayerSettings>('/api/player-settings'),
   savePlayerSettings: (settings: PlayerSettings) => request<PlayerSettings>('/api/player-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }),
-  editTranslation: (videoId: string, analysisId: string, segment: SubtitleSegment, translation: string, target = "vi") => request<LearningDocument>(`/api/videos/${videoId}/subtitles/${segment.id}/translation`, {
+  editTranslation: (videoId: string, analysisId: string, segment: SubtitleSegment, translation: string, target = "vi", model = "hymt-1.8b-q8") => request<LearningDocument>(`/api/videos/${videoId}/subtitles/${segment.id}/translation?model=${model}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analysis_id: analysisId, revision: segment.revision, source_text: segment.text, translation, target_language: target }),
   }),
   health: () => request<Health>('/api/health'),

@@ -560,3 +560,58 @@ test('independent transcript and video display toggles, equal status widths and 
  expect(Math.max(...mobileWidths)-Math.min(...mobileWidths)).toBeLessThan(1);
  await page.screenshot({path:'test-results/display-controls-mobile.png',fullPage:true});
 });
+
+test('translation model selection, truthful source labels, cache reuse and centered header', async ({page})=>{
+ test.setTimeout(240_000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ const selector=page.getByLabel('Translation model',{exact:true});
+ await expect(selector.locator('option')).toHaveCount(3);
+ await expect(selector.locator('option[value="hymt-7b-q4km"]')).toBeEnabled();
+ const videos=await (await page.request.get('/api/videos')).json();
+ const video=videos.find((v:{original_name:string})=>v.original_name==='mandarin-test.mp4');
+ const subtitles=await (await page.request.get(`/api/videos/${video.id}/subtitles`)).json();
+ for(const [id,label] of [['marian','OPUS / Marian (original)'],['hymt-7b-q4km','Hy-MT2 7B Q4_K_M'],['hymt-1.8b-q8','Hy-MT2 1.8B Q8']]){
+  await selector.selectOption(id);
+  await expect(page.getByTestId('translation-source').first()).toHaveText(`Translated by ${label}`,{timeout:120_000});
+  await expect.poll(async()=> (await (await page.request.get('/api/player-settings')).json()).translation_model).toBe(id);
+  const result=await (await page.request.get(`/api/videos/${video.id}/learning?target=vi&model=${id}`)).json();
+  expect(result.translation_model).toBe(id);
+  expect(result.segments[0].translation.status).toBe('completed');
+  const current=await (await page.request.get(`/api/videos/${video.id}/subtitles`)).json();
+  expect(current.analysis.id).toBe(subtitles.analysis.id);
+  if(id==='hymt-7b-q4km'){
+   await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true}).click();
+   await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/eat|dinner/i,{timeout:120_000});
+   await expect(page.getByTestId('subtitle-vietnamese')).toHaveAttribute('lang','en');
+   await expect(page.getByTestId('translation-source').first()).toContainText('Hy-MT2 7B Q4_K_M');
+   await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'Tiếng Việt',exact:true}).click();
+  }
+ }
+ await selector.selectOption('hymt-7b-q4km');
+ await expect(page.getByTestId('translation-source').first()).toHaveText('Translated by Hy-MT2 7B Q4_K_M');
+ await page.waitForTimeout(500);
+ await page.reload();
+ await expect(selector).toHaveValue('hymt-7b-q4km');
+ await expect(page.getByTestId('translation-source').first()).toHaveText('Translated by Hy-MT2 7B Q4_K_M');
+ for(const width of [2560,1920,1000,390]){
+  await page.setViewportSize({width,height:1000});
+  const bounds=await page.evaluate(()=>{
+   const head=document.querySelector('.topbar-inner')!;
+   const main=document.querySelector('main')!;
+   const h=head.getBoundingClientRect(),m=main.getBoundingClientRect();
+   const hs=getComputedStyle(head),ms=getComputedStyle(main);
+   return {hl:h.left+parseFloat(hs.paddingLeft),ml:m.left+parseFloat(ms.paddingLeft),hr:h.right-parseFloat(hs.paddingRight),mr:m.right-parseFloat(ms.paddingRight),overflow:document.documentElement.scrollWidth>innerWidth};
+  });
+  expect(Math.abs(bounds.hl-bounds.ml)).toBeLessThan(1);
+  expect(Math.abs(bounds.hr-bounds.mr)).toBeLessThan(1);
+  expect(bounds.overflow).toBe(false);
+ }
+ await page.setViewportSize({width:1920,height:1080});
+ await page.screenshot({path:'test-results/model-selection-light.png',fullPage:true});
+ await page.getByRole('switch',{name:'Dark mode'}).click();
+ await page.screenshot({path:'test-results/model-selection-dark.png',fullPage:true});
+ // Retain the lightweight default for other tests using this shared test server.
+ await selector.selectOption('hymt-1.8b-q8');
+ await expect(page.getByTestId('translation-source').first()).toContainText('1.8B Q8');
+ await page.waitForTimeout(500);
+});

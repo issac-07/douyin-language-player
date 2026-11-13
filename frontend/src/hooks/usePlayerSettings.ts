@@ -3,7 +3,7 @@ import type { PlayerSettings } from '../types';
 import { api } from '../services/api';
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
-  sentence_language:'vi',dictionary_language:'vi',
+  translation_model:'hymt-1.8b-q8',sentence_language:'vi',dictionary_language:'vi',
   mode: 'interactive', font_size: 20, pinyin_size: 12, translation_size: 13,
   vertical_offset: 0, horizontal_offset: 0, background_opacity: .35, text_color: '#ffffff', text_shadow: true,
   show_pinyin: true, show_chinese: true, show_translation: true, show_all: true, pause_on_word: false, auto_pause: false,

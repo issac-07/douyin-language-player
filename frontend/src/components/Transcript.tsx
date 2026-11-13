@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { DictionaryResult, LearningDocument, LearningSegment, SavedWord, SubtitleDocument, SubtitleSegment, WordToken } from '../types';
-import { transcriptSubtitle } from '../services/playback';
+import { transcriptSubtitle, translationModelLabel } from '../services/playback';
 import { WordSummary } from './WordSummary';
 
 function SubtitleRow({ segment, active, seek, save, remove, language, onWord, saveTranslation, showPinyin, showTranslation }: {
@@ -21,6 +21,7 @@ function SubtitleRow({ segment, active, seek, save, remove, language, onWord, sa
   return <article className={`subtitle-row ${active ? 'active' : ''}`} data-testid="subtitle-row" data-source-text={segment.text} tabIndex={0} aria-current={active?'true':undefined} onClick={event=>{if(!(event.target as HTMLElement).closest('button,details,a,input,textarea,select'))seek(segment.start_time);}} onKeyDown={event=>{if(event.target===event.currentTarget && ['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();seek(segment.start_time);}}}>
     {!editing && <div lang="zh" className="reading-sentence">{language?.text===segment.text ? language.tokens.map(token=>token.selectable ? <button className="transcript-word" key={token.start} onClick={()=>onWord(token)} aria-label={`Look up ${token.text} from transcript`}><ruby>{token.text}{showPinyin && <rt>{token.pinyin.normalize('NFC')}</rt>}</ruby></button> : <span key={token.start}>{token.text}</span>) : segment.text}</div>}
     {showTranslation && language && !editing && <p className="reading-translation" lang={language.translation.target_language==='en'?'en':'vi'}>{language.translation.text ?? (language.translation.status==='pending'?'Translating…':'Translation unavailable')}</p>}
+    {showTranslation && language?.translation.text && <small className="translation-source" data-testid="translation-source">{language.translation.status==='manual'?'Edited by you':`Translated by ${translationModelLabel(language.translation.model)}`}</small>}
     <details className="row-tools"><summary aria-label="Subtitle tools">⋯</summary><button className="text-action" onClick={()=>seek(segment.start_time)}>Go to this sentence</button><small>{Math.round(segment.confidence*100)}% OCR confidence{segment.edited?' · edited':''}</small>
     {editing ? <form onSubmit={async (event) => {
       event.preventDefault(); setBusy(true); setError('');
@@ -36,7 +37,7 @@ function SubtitleRow({ segment, active, seek, save, remove, language, onWord, sa
       setBusy(true); setError('');
       try { await remove(segment); } catch (cause) { setError((cause as Error).message); setBusy(false); }
     }}>Delete subtitle</button></div></>}
-    {language && <div className="transcript-translation"><small>{language.translation.status === 'manual' ? `Your ${target} translation` : `${target} · local machine translation`}</small><p lang={target === "English" ? "en" : "vi"}>{language.translation.text ?? (language.translation.status === 'pending' ? 'Translating locally…' : `${target} translation unavailable.`)}</p>{language.translation.error && <p className="error-text">{language.translation.error}</p>}
+    {language && <div className="transcript-translation"><small>{language.translation.status === 'manual' ? `Your ${target} translation` : `${target} · ${translationModelLabel(language.translation.model)}`}</small><p lang={target === "English" ? "en" : "vi"}>{language.translation.text ?? (language.translation.status === 'pending' ? 'Translating locally…' : `${target} translation unavailable.`)}</p>{language.translation.error && <p className="error-text">{language.translation.error}</p>}
       <button className="text-action" onClick={() => { setTranslation(language.translation.text ?? ''); setTranslationEditing(!translationEditing); }}>Edit {target} translation</button>
       {translationEditing && <form onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(''); try { await saveTranslation(segment, translation); setTranslationEditing(false); } catch (cause) { setError((cause as Error).message); } finally { setBusy(false); } }}><label className="sidebar-field">{target} sentence translation<textarea lang={target === "English" ? "en" : "vi"} aria-label={`${target} sentence translation`} value={translation} onChange={(event) => setTranslation(event.target.value)} required maxLength={5000} rows={3} /></label><button className="secondary-button" disabled={busy}>Save translation</button></form>}
     </div>}

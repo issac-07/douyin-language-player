@@ -28,7 +28,13 @@ class LearningSegment(BaseModel):
     translation: Translation
 
 
+TranslationModel = Literal['marian', 'hymt-1.8b-q8', 'hymt-7b-q4km']
+
+
 class LearningDocument(BaseModel):
+    translation_model: TranslationModel = 'hymt-1.8b-q8'
+    model_label: str = 'Hy-MT2 1.8B Q8'
+
     target_language: Literal["en", "vi"] = "vi"
     video_id: UUID
     analysis_id: UUID | None
@@ -78,6 +84,7 @@ class TranslationEdit(BaseModel):
 
 
 class PlayerSettings(BaseModel):
+    translation_model: TranslationModel = 'hymt-1.8b-q8'
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     mode: Literal['interactive', 'minimal'] = 'interactive'
     font_size: float = Field(default=20, ge=10, le=44)

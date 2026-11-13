@@ -1,3 +1,4 @@
+export type TranslationModel = 'marian' | 'hymt-1.8b-q8' | 'hymt-7b-q4km';
 export interface Video {
   id: string;
   original_name: string;
@@ -94,11 +95,12 @@ export interface SubtitleDocument {
 export interface WordToken { text: string; start: number; end: number; pinyin: string; selectable: boolean }
 export interface Translation { target_language?: "en" | "vi"; status: 'pending' | 'completed' | 'failed' | 'unavailable' | 'manual'; text: string | null; model: string | null; error: string | null; seconds: number | null }
 export interface LearningSegment { id: string; revision: number; text: string; tokens: WordToken[]; translation: Translation }
-export interface LearningDocument { target_language?: "en" | "vi"; video_id: string; analysis_id: string | null; segments: LearningSegment[]; dictionary_available: boolean }
+export interface LearningDocument { translation_model?: TranslationModel; model_label?: string; target_language?: "en" | "vi"; video_id: string; analysis_id: string | null; segments: LearningSegment[]; dictionary_available: boolean }
 export interface DictionaryEntry { traditional: string; simplified: string; pinyin: string; meanings: string[] }
 export interface DictionaryResult { parts?: DictionaryEntry[]; translation?: Translation | null; word: string; entries: DictionaryEntry[]; available: boolean; source: string; language: string; license: string }
 export interface SavedWord { id: string; word: string; pinyin: string; entries: DictionaryEntry[]; status: 'new' | 'learning' | 'known'; notes: string; updated_at: string }
 export interface PlayerSettings {
+  translation_model?: TranslationModel;
   sentence_language?: "en" | "vi"; dictionary_language?: "en" | "vi";
   mode: 'interactive' | 'minimal'; font_size: number; pinyin_size: number; translation_size: number;
   vertical_offset: number; horizontal_offset: number; background_opacity: number; text_color: string; text_shadow: boolean;

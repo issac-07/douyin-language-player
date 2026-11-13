@@ -239,3 +239,12 @@ body {min-width:320px;background:var(--page);color:var(--ink);}
 @media(min-width:1101px){#toolbar-languages{flex:0 0 auto;}}
 @media(max-width:800px){#toolbar-languages .language-controls{justify-content:flex-end;}}
 @media(prefers-reduced-motion:reduce){.language-switch-indicator{transition:none;}}
+
+/* Header and content share the same centered container at every viewport width. */
+.v2-app .topbar {display:block;padding:0;}
+.v2-app .topbar-inner {width:100%;max-width:1800px;margin-inline:auto;padding:14px 24px;display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;box-sizing:border-box;}
+.translation-model-control {display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:12px 0;font-size:12px;color:var(--muted);}
+.translation-model-control label {font-weight:600;color:var(--ink);}
+.translation-model-control select {background:var(--surface);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 12px;font:inherit;max-width:100%;}
+.translation-source {display:block;font-size:10px;color:var(--muted);margin-top:5px;}
+@media(max-width:1100px) {.v2-app .topbar-inner{padding:12px 14px;}.model-selection-help{display:none;}}
