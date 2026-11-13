@@ -7,7 +7,10 @@ test('Douyin share text to the existing player, full learning workflow and dupli
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
+  await page.getByRole('button', {name:'Import another video', exact:true}).click();
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('分享中文 #学习 https://v.douyin.com/AbC123/ 复制链接打开抖音');
+  await page.getByText('Import options & help', {exact:true}).click();
   await page.getByLabel('Analyze after import', { exact: true }).check();
   await page.getByLabel('Use public-page import (isolated Edge)', { exact: true }).check();
   const submitted = page.waitForResponse((response) => response.url().endsWith('/api/imports/douyin') && response.request().method() === 'POST');
@@ -35,6 +38,7 @@ test('Douyin share text to the existing player, full learning workflow and dupli
   await page.screenshot({ path: '../data/validation/phase4-edge-import-learning.png', fullPage: true });
   const before = await page.request.get('/api/videos').then((response) => response.json());
   await page.getByRole('button', { name: 'Import another video', exact: true }).click();
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://www.douyin.com/video/6961737553342991651');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Opened existing video');
@@ -49,17 +53,22 @@ test('Douyin share text to the existing player, full learning workflow and dupli
 
 test('URL rejection, accurate HTTP 403 diagnostics, indeterminate progress, cancellation and local fallback', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', {name:'Import another video', exact:true}).click();
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://tiktok.com/video/123');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Only public Douyin links');
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://www.douyin.com/video/6961737553342991999');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Site returned HTTP 403');
   await expect(page.getByLabel('Douyin import status')).toContainText('does not prove that login is required');
+  await page.getByLabel('Douyin import status').getByText('View error details', {exact:true}).click();
   await page.getByText('Diagnostic details', { exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Stage: Extract metadata. HTTP 403.');
   await expect(page.getByRole('button', { name: 'Import a local MP4 instead', exact: true })).toBeVisible();
   await page.screenshot({ path: '../data/validation/phase4-edge-access-failure.png', fullPage: true });
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://www.douyin.com/video/6961737553342991997');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Downloading…');
@@ -67,19 +76,71 @@ test('URL rejection, accurate HTTP 403 diagnostics, indeterminate progress, canc
   await expect(page.getByRole('button', { name: 'Cancel import', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel import', exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Import cancelled');
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByRole('tab', { name: 'Import Local MP4', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Choose local MP4', exact: true })).toBeVisible();
 });
 
 test('authentication and extractor compatibility have distinct errors', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', {name:'Import another video', exact:true}).click();
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://www.douyin.com/video/6961737553342991995');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Authentication required');
   await expect(page.getByLabel('Douyin import status')).toContainText('HTTP 401');
+  if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://www.douyin.com/video/6961737553342991994');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
   await expect(page.getByLabel('Douyin import status')).toContainText('Extractor compatibility problem');
   await expect(page.getByLabel('Douyin import status')).toContainText('does not establish that account login is required');
+  await page.getByLabel('Douyin import status').getByText('View error details', {exact:true}).click();
   await expect(page.getByRole('button', { name: 'Import a local MP4 instead', exact: true })).toBeVisible();
+});
+
+
+test('v4.8 import stays collapsed on failure/reload, preserves input and can hide active work', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  const toggle = page.getByRole('button', {name:'Import another video', exact:true});
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByLabel('Douyin link or sharing text')).toBeHidden();
+  await toggle.click();
+  const input = page.getByLabel('Douyin link or sharing text');
+  const failing = 'https://www.douyin.com/video/6961737553342991999';
+  await input.fill(failing);
+  await page.getByRole('button', {name:'Hide import options', exact:true}).click();
+  await toggle.click();
+  await expect(input).toHaveValue(failing);
+  await page.getByRole('button', {name:'Import link', exact:true}).click();
+  const status = page.getByLabel('Douyin import status');
+  await expect(status).toContainText('Could not import video');
+  await expect(input).toBeHidden();
+  await expect(status.locator('.import-more')).not.toHaveAttribute('open');
+  await expect(status.getByText('Site returned HTTP 403', {exact:true})).toBeHidden();
+  await page.reload();
+  await expect(status).toContainText('Could not import video');
+  await expect(input).toBeHidden();
+  await expect(status.locator('.import-more')).not.toHaveAttribute('open');
+  await status.getByText('View error details', {exact:true}).focus();
+  await page.keyboard.press('Enter');
+  await expect(status.getByText('Site returned HTTP 403', {exact:true})).toBeVisible();
+  await status.getByText('View error details', {exact:true}).click();
+  await expect(status.getByText('Site returned HTTP 403', {exact:true})).toBeHidden();
+  await toggle.click();
+  await input.fill('https://www.douyin.com/video/6961737553342991997');
+  await page.getByRole('button', {name:'Import link', exact:true}).click();
+  await expect(status).toContainText('Downloading');
+  await page.getByRole('button', {name:'Hide import options', exact:true}).click();
+  await expect(input).toBeHidden();
+  await expect(page.getByLabel('Download progress')).toBeVisible();
+  await expect(page.getByLabel('Download progress')).not.toHaveAttribute('value');
+  await page.getByRole('button', {name:'Cancel import', exact:true}).click();
+  await expect(status).toContainText('Import cancelled');
+  await page.screenshot({path:'test-results/v48-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'test-results/v48-mobile.png',fullPage:true});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
 });

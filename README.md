@@ -1,5 +1,7 @@
 # Douyin Language Player — Phase 4
 
+**v4.8 UI:** a quieter workspace with collapsed import/error/processing details, compact live OCR stages, on-demand help, simplified language controls and bounded mobile transcript scrolling. OCR, translation and data behavior stay unchanged; the backend API remains 0.4.7. See [UI changes, usage and validation](docs/V4_8_UI_VALIDATION.md).
+
 **v4.7 / OCR P1 improvements:** live stage/elapsed reporting during refinement, insertion/deletion merge fixes, direct Chinese→English or Chinese→Vietnamese sentence selection, separately labeled word meanings, Basic/Advanced OCR controls, hardware availability checks and local storage/explicit cache-history cleanup. The English model is installed locally; use `python scripts/setup_language_resources.py --translation-only --target en` for another installation. The OCR recognition model is unchanged and Fast showed no real-video skip benefit. See [validation, measurements, usage and remaining limits](docs/V4_7_VALIDATION.md).
 
 **v4.6 / Fast-OCR:** per-video-frame subtitle synchronization, bounded decode prefetch, optional two-frame start-boundary refinement and 1/2/4 parallel Intel GPU OCR lanes. Buttons are now **Create / open subtitles** (cache-or-scan) and **Scan OCR again** (force). Old settings/corrections remain usable. GPU concurrency is opt-in and Fast is still experimental. See [measurements, tests and limits](docs/V4_6_VALIDATION.md).

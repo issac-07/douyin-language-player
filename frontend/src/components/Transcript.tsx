@@ -56,7 +56,7 @@ export function Transcript({ document, currentTime, seek, save, remove, learning
   useEffect(() => { if (selection) setTab('dictionary'); }, [selection?.nonce]);
   return <aside className="learning-panel" aria-label="Learning tools">
     <div className="panel-tabs" role="tablist" aria-label="Learning panel">{(['transcript', 'dictionary', 'vocabulary'] as const).map((item) => <button key={item} role="tab" id={`${item}-tab`} aria-controls="learning-content" aria-selected={tab === item} onClick={() => setTab(item)}><Icon name={item === 'transcript' ? 'captions' : 'book'} size={15} />{item === 'transcript' ? 'Transcript' : item === 'dictionary' ? 'Dictionary' : 'Vocabulary'}</button>)}</div>
-    <div id="learning-content" role="tabpanel" aria-labelledby={`${tab}-tab`} className="panel-content transcript-content">
+    <div id="learning-content" role="tabpanel" tabIndex={0} aria-labelledby={`${tab}-tab`} className="panel-content transcript-content">
       <span className="panel-counter">{tab === 'transcript' ? 'SUBTITLES' : tab === 'dictionary' ? 'WORD DETAILS' : 'SAVED WORDS'}<span>{tab === 'transcript' ? document?.segments.length ?? 0 : tab === 'vocabulary' ? vocabulary.length : 'EN'}</span></span>
       {tab === 'transcript' ? <>
         {document?.analysis && <div className="export-links"><a href={`/api/videos/${document.video_id}/export?format=json&analysis_id=${document.analysis.id}`} download>Export JSON</a><a href={`/api/videos/${document.video_id}/export?format=srt&analysis_id=${document.analysis.id}`} download>Export SRT</a></div>}

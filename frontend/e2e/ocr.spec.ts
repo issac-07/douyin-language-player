@@ -86,7 +86,7 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await expect(rows.first()).toContainText('今天我们一起去吃饭！');
   await expect(rows.first()).toContainText('edited');
   await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
-  await expect(page.getByText('Loaded cached subtitles, including your corrections. No OCR rerun was needed.')).toBeVisible();
+  await expect(page.getByText('Opened saved subtitles.')).toBeVisible();
   for (const format of ['JSON', 'SRT']) {
     const downloading = page.waitForEvent('download');
     await page.getByRole('link', { name: `Export ${format}` }).click();
