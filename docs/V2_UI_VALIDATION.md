@@ -1,0 +1,36 @@
+# V2 UI — Paper Studio / Immersive Cinema
+
+Implemented 13 November 2026 (Australia/Sydney) in the original `D:\Projects\douyin-language-player` project, on the user's existing **v2---Update-UI** branch. Starting HEAD `f020505` was clean and contained the merged previous work. No branch creation/switch, commit, push, backend/schema change or OCR/model algorithm change was performed for V2.
+
+## Approved layout implemented
+
+- One shared two-column watch page. Large player and subtitle analysis/settings below it on the left; transcript, selected-word summary and Your videos in normal document flow on the right. The old left library sidebar and marketing hero are removed. The right stack is not sticky; the page scrolls to the library below the transcript. The transcript itself has a bounded keyboard-focusable scroll region so long documents do not bury everything below them.
+- Porcelain/terracotta Light mode is the first-use default; espresso/ivory/copper Dark mode uses the same components. Theme is saved in `dlp-theme` browser storage and restored before the app renders. Existing player appearance preferences are preserved; theme does not recolor user video or change saved subtitle colors. The toolbar holds both learning-language selectors, Add video, theme controls and Saved words.
+- Reading transcript defaults to Chinese with real token pinyin in ruby above the words. No time column, confidence, sentence translation, play triangle or repeated editing toolbar appears by default. Active sentence has a subtle theme highlight and left accent. Internal segment times remain unchanged. Click the row background or press Enter/Space on a focused row to seek; selecting a word looks it up without also seeking. Current sentence scrolls into view inside its own region, without calling page scrollIntoView.
+- Each row's ellipsis **Subtitle tools** preserves text/time editing, deletion, translation correction and confidence inspection. The heading's **Transcript tools** keeps JSON/SRT exports and translation retry. Existing media-time synchronization/replay/auto-pause and fullscreen remain.
+- Compact selected-word strip appears below the transcript. It contains Chinese, contextual pinyin, concise meaning with source label, pronunciation, quick save and **More**. More reveals the original full dictionary/learning-status/notes interface. English CC-CEDICT and machine-generated Vietnamese meanings are still labeled separately. No meanings, grammatical tags or translations are fabricated for visual fidelity.
+- The Saved words toolbar button reveals vocabulary management without replacing the transcript. Saved vocabulary remains readable/editable/removable even if the video library is empty.
+- Your videos shows real lazy-loaded preview frames from the existing preview endpoint, titles and durations. Broken previews fall back to a neutral thumbnail. No stock/generated video thumbnails are used. Video selection, remembering the last item, imports and confirmed deletion remain in place.
+- Import is opened from Add video; failed/active job summaries remain compact and inspectable. Existing cache/history/storage controls are retained below the workspace. On narrow screens the layout stacks player/settings, transcript/word tools and library, without horizontal overflow.
+
+## Pronunciation implementation and limitation
+
+`WordSummary` uses the browser SpeechSynthesis API on an explicit button click. It loads voices immediately, listens for `voiceschanged`, and refreshes once for late enumeration. Only local Mandarin candidates (zh-CN/zh-TW/zh-SG/cmn) are accepted, preferring zh-CN; English/Vietnamese/Cantonese are not silently substituted. Remote voices are not used. Switching word/video or unmounting cancels owned speech; native errors and a 15-second watchdog are handled, and stale utterance callbacks are ignored.
+
+**Actual Edge inspection on this machine enumerated only three en-US local voices, no Mandarin.** Therefore pronunciation is disabled with a visible installation explanation here. No Mandarin audio playback or pronunciation quality is claimed on this installation. Install a suitable local Mandarin speech voice via the OS speech/language settings, then refresh/reopen the browser. No model, OS voice, paid API, system dependency or remote speech service was installed. The successful voice-selection/speak/cancel path was verified with a browser test double, not presented as actual audible verification.
+
+Source API references: [getVoices](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis/getVoices), [voiceschanged](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis/voiceschanged_event), [localService](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisVoice/localService).
+
+## Validation
+
+- TypeScript/Vite production build passed; 11 existing frontend unit tests passed.
+- 15 Edge tests passed, retaining real MP4 import/playback, ROI/OCR, corrections, JSON/SRT download, cancellation, dictionary, wordbook persistence/CSV, translation languages, fullscreen and Douyin import fixtures. New checks cover theme persistence, timestamp-free ruby transcript, compact/expanded word view, right-column library, mobile overflow, empty-library vocabulary access and speech availability/local-Mandarin invocation/cancellation via a controlled test double.
+- Old tests were adapted to explicitly open Subtitle tools/More instead of assuming permanently visible edit/dictionary controls. Original OCR text is checked through the segment's data-source-text because ruby annotations intentionally add pinyin to DOM text content. Exported JSON/SRT text and timing checks remain intact.
+- The normal app at port 5173 was opened in fresh Edge sessions in both themes. No JavaScript page errors occurred; desktop 1600×1000 and mobile 390×844 screenshots were captured and inspected. Horizontal mobile overflow was false. Paused video snapshots were taken after seeking/settling so a transient captured black frame was not mistaken for a theme error. No backend or normal dev-server restart was needed.
+- Screenshots: `data/validation/v2-light.png`, `v2-dark.png`, `v2-mobile.png`; isolated browser captures also live under `frontend/test-results`. Generated café mockups are references only and are not shipped as video content.
+
+## Differences from the concept images
+
+Real imported media, filenames, actual OCR, dictionary and language choices replace the invented café content. The full pronunciation strip includes a small voice-unavailable note on this machine. Both language selectors, explicit source labels, confirmed video deletion, existing advanced settings, storage management and optional editing/export menus remain for functionality and accessibility. These are deliberate functional details rather than fictional mockup features. The unchanged backend still reports 0.4.7; the frontend release label is V2 UI.
+
+No formal screen-reader audit or physical mobile-device test was performed. Browser theme preference is local to the browser profile. Existing OCR accuracy, name recognition, translation quality and sampling/refinement limitations remain unchanged. No extension or new dependency was added. User media/transcripts were not replaced by test results; integration tests use isolated data folders.

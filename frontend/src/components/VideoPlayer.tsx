@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
 import type { LearningDocument, PlayerSettings, ProcessingSettings, SubtitleSegment, Video, WordToken } from '../types';
 import { activeSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from '../services/playback';
 import { Icon } from './Icon';
@@ -6,8 +6,8 @@ import { InteractiveSubtitleOverlay } from './InteractiveSubtitleOverlay';
 import { SubtitleAppearance } from './SubtitleAppearance';
 import { DEFAULT_PLAYER_SETTINGS } from '../hooks/usePlayerSettings';
 
-export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget }: {
-  video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void;
+export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget, libraryActions }: {
+  libraryActions?: ReactNode; video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void;
   learning?: LearningDocument | null; settings?: PlayerSettings; updateSettings?: (settings: PlayerSettings) => void; settingsStatus?: string;
   roi?: ProcessingSettings['roi']; onWord?: (token: WordToken) => void; fullscreenTarget?: RefObject<HTMLDivElement | null>;
 }) {
@@ -99,8 +99,9 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (container.current?.closest('[hidden]')) return;
       const target = event.target as HTMLElement;
-      if (target.closest('input, select, textarea, button, [contenteditable="true"]') || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.defaultPrevented || target.closest('input, select, textarea, button, summary, [contenteditable="true"]') || event.ctrlKey || event.metaKey || event.altKey) return;
       if (![' ', 'k', 'ArrowLeft', 'ArrowRight', 'm', 'f'].includes(event.key)) return;
       event.preventDefault();
       const media = element.current;
@@ -156,11 +157,7 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
         </select>
         <button className="icon-button" aria-label="Fullscreen" title="Fullscreen (F)" onClick={() => void fullscreen()}><Icon name="expand" /></button>
       </div>
-      {segments.length > 0 && <div className="sentence-controls">
-        <button onClick={() => { const index = active ? segments.findIndex((item) => item.id === active.id) : -1; const before = index >= 0 ? segments[Math.max(0, index - 1)] : [...segments].reverse().find((item) => item.start_time < time - .05); if (before) seek(before.start_time); }}>Previous subtitle</button>
-        <button onClick={() => { const current = active ?? [...segments].reverse().find((item) => item.start_time <= time); if (current) { seek(current.start_time); void element.current?.play(); } }}>Replay subtitle</button>
-        <button onClick={() => { const next = segments.find((item) => item.start_time > time + .05); if (next) seek(next.start_time); }}>Next subtitle</button>
-      </div>}
+      {libraryActions && <div className="player-library-actions">{libraryActions}</div>}
     </div>
     {appearanceOpen && <SubtitleAppearance settings={settings} update={updateSettings} status={settingsStatus} close={() => setAppearanceOpen(false)} />}
   </div>;

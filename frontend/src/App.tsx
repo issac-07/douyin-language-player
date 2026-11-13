@@ -3,13 +3,28 @@ import { StoragePanel } from './components/StoragePanel';
 import { Icon } from './components/Icon';
 import { OCRWorkspace } from './components/OCRWorkspace';
 import { api, uploadVideo } from './services/api';
-import { formatTime } from './services/playback';
+import { VocabularyPage } from './components/VocabularyPage';
+import { VideoLibrary } from './components/VideoLibrary';
 import type { Health, Video } from './types';
 import { usePlayerSettings } from './hooks/usePlayerSettings';
 import { DouyinImportPanel } from './components/DouyinImportPanel';
 
 export default function App() {
   const appearance = usePlayerSettings();
+  const [theme,setTheme]=useState<'light'|'dark'>(()=>document.documentElement.dataset.theme==='dark'?'dark':'light');
+  const [openImport,setOpenImport]=useState(0);
+  const [vocabularyOpen,setVocabularyOpen]=useState(()=>window.location.hash==='#vocabulary');
+  const [vocabularyRevision,setVocabularyRevision]=useState(0);
+  const watchScroll=useRef(0);
+  const previousFocus=useRef<HTMLElement|null>(null);
+  const enteredFromWatch=useRef(false);
+  const importScrollRequested=useRef(false);
+  const navigateBook=()=>{watchScroll.current=window.scrollY;previousFocus.current=document.activeElement as HTMLElement;document.querySelector('video')?.pause();enteredFromWatch.current=true;history.pushState(null,'','#vocabulary');setVocabularyOpen(true);window.scrollTo(0,0);};
+  const returnToWatch=()=>{if(enteredFromWatch.current){enteredFromWatch.current=false;history.back();}else{history.replaceState(null,'',location.pathname+location.search);setVocabularyOpen(false);}};
+  useEffect(()=>{const changed=()=>setVocabularyOpen(location.hash==='#vocabulary');addEventListener('popstate',changed);addEventListener('hashchange',changed);return()=>{removeEventListener('popstate',changed);removeEventListener('hashchange',changed);};},[]);
+  useEffect(()=>{if(vocabularyOpen){document.querySelector('video')?.pause();return;}setVocabularyRevision(v=>v+1);const frame=requestAnimationFrame(()=>{window.scrollTo(0,watchScroll.current);previousFocus.current?.focus({preventScroll:true});});return()=>cancelAnimationFrame(frame);},[vocabularyOpen]);
+  useEffect(()=>{if(vocabularyOpen || !importScrollRequested.current)return;const frame=requestAnimationFrame(()=>{document.getElementById('import-zone')?.scrollIntoView({block:'center'});importScrollRequested.current=false;});return()=>cancelAnimationFrame(frame);},[openImport,vocabularyOpen]);
+  useEffect(()=>{document.documentElement.dataset.theme=theme;try{localStorage.setItem('dlp-theme',theme);}catch{}},[theme]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [selected, setSelected] = useState<Video | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -21,7 +36,6 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [tab, setTab] = useState<'transcript' | 'vocabulary'>('transcript');
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -75,41 +89,19 @@ export default function App() {
     finally { setDeleting(false); }
   };
 
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <a className="brand" href="/" aria-label="Douyin Language Player home"><span className="brand-mark">语</span><span>Douyin<span className="brand-sub">LANGUAGE PLAYER</span></span></a>
-      <div className="workspace-label">YOUR WORKSPACE</div>
-      <div className="nav-active"><Icon name="film" /> Video library <span>{videos.length}</span></div>
-      <button className="primary-button sidebar-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import MP4</button>
-      <div className="library-heading"><span>RECENT VIDEOS</span><button className="text-button" onClick={() => void load()} disabled={loading || uploading} aria-label="Refresh library">↻</button></div>
-      <div className="recent-list" aria-label="Recent videos">
-        {loading && <p className="sidebar-empty">Loading your library…</p>}
-        {!loading && videos.length === 0 && <p className="sidebar-empty">Your videos will appear here.<br />Start with a local MP4.</p>}
-        {videos.map((video) => <button key={video.id} className={`recent-video ${selected?.id === video.id ? 'selected' : ''}`} onClick={() => setSelected(video)} aria-pressed={selected?.id === video.id}>
-          <span className="recent-icon"><Icon name="film" size={19} /></span><span className="recent-info"><strong title={video.title ?? video.original_name}>{video.title ?? video.original_name}</strong><small>{formatTime(video.duration)} · {video.width} × {video.height}{video.imported_from === 'douyin' ? ' · Douyin' : ''}</small></span>
-        </button>)}
-      </div>
-      <div className="local-note"><span className="status-dot" /><span>Local workspace<small>Files stay on this computer.</small></span></div>
-    </aside>
-
-    <div className="main-shell">
-      <header className="topbar"><div><span className="muted">Workspace</span><span className="breadcrumb">/</span><span>Player</span></div><span className="phase-badge">v4.8 <span>·</span> WATCH & LEARN</span></header>
-      <main>
-        <div className="page-heading"><div><div className="eyebrow">A LITTLE EVERY DAY</div><h1>Your next conversation<br className="mobile-break" /> starts here.</h1><p>Watch at your own pace. Make room for the words.</p></div><button className="secondary-button heading-import" onClick={() => fileInput.current?.click()} disabled={uploading}><Icon name="upload" size={17} /> Import video</button></div>
-
+  const library=<VideoLibrary videos={videos} selected={selected?.id} onSelect={setSelected} refresh={()=>void load()} loading={loading}/>;
+  return <div className="app-shell v2-app"><div className="main-shell">
+    <header className="topbar"><a className="v2-brand" href="/" aria-label="Douyin Language Player home"><span aria-hidden="true">▷</span> Douyin Language Player</a><div id="toolbar-languages" hidden={vocabularyOpen}/><div className="toolbar-actions"><button className="primary-button" disabled={uploading} onClick={()=>{importScrollRequested.current=true;if(vocabularyOpen)returnToWatch();setOpenImport(v=>v+1);}}>+ Add video</button><button className="theme-switch" type="button" role="switch" aria-label="Dark mode" aria-checked={theme==='dark'} onClick={()=>setTheme(theme==='light'?'dark':'light')}><svg aria-hidden="true" viewBox="0 0 24 24" className="theme-sun"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></svg><svg aria-hidden="true" viewBox="0 0 24 24" className="theme-moon"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></svg><span className="theme-switch-knob"/></button><button aria-label="Saved words" aria-current={vocabularyOpen?'page':undefined} onClick={()=>vocabularyOpen?returnToWatch():navigateBook()}>▤ Vocabulary</button><span className="phase-badge">V2.1 UI</span></div></header>
+    <main>
+      {vocabularyOpen && <VocabularyPage onBack={returnToWatch} language={appearance.settings.dictionary_language??'en'}/>}
+      <div className="watch-surface" hidden={vocabularyOpen}>
         <input ref={fileInput} id="video-file" className="sr-only" type="file" accept=".mp4,video/mp4" aria-label="Choose MP4 file" disabled={uploading} onChange={(event) => void importFile(event.target.files?.[0])} />
         {error && <div className="alert error" role="alert">Action could not be completed.<details key={error}><summary>View error details</summary><p>{error}</p></details><button className="text-button" onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
         {notice && <div className="alert success" role="status"><Icon name="check" size={16} /><span>{notice}</span><button className="text-button" aria-label="Dismiss notification" onClick={() => setNotice('')}>×</button></div>}
         {health && !health.ffprobe_available && <div className="alert error" role="alert">FFprobe is missing. Add FFmpeg to PATH and restart the backend before importing.</div>}
         {uploading && <div className="upload-progress" role="status"><span>{progress < 100 ? `Uploading your video · ${progress}%` : 'Upload received · inspecting the MP4…'}</span><progress max="100" value={progress} /></div>}
 
-        <DouyinImportPanel collapseToken={selected?.id} localBusy={uploading} onLocal={() => fileInput.current?.click()} onImported={(video, reused) => {
-          libraryRevision.current += 1;
-          setVideos((current) => [video, ...current.filter((item) => item.id !== video.id)]);
-          setSelected(video); setNotice(reused ? 'Opened the existing local copy. Cached analysis remains available.' : 'Douyin video imported into your local library.');
-        }} />
-        {selected && <div className="video-library-actions"><button className="text-action danger" disabled={deleting || uploading} onClick={() => void deleteSelected()}>{deleting ? 'Deleting…' : 'Delete selected video'}</button></div>}
-        {selected ? <OCRWorkspace key={selected.id} video={selected} appearance={appearance} /> : <div className="workspace-grid">
+        {selected ? <OCRWorkspace libraryActions={<button className="text-action danger" disabled={deleting || uploading} onClick={() => void deleteSelected()}>{deleting ? 'Deleting…' : 'Delete selected video'}</button>} library={library} vocabularyRevision={vocabularyRevision} key={selected.id} video={selected} appearance={appearance} /> : <div className="workspace-grid">
           <section className="viewing-column" aria-label="Video workspace">
             <div className={`empty-player ${dragging ? 'dragging' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void importFile(event.dataTransfer.files[0]); }}>
               <div className="empty-art" aria-hidden="true"><div className="art-frame back-frame" /><div className="art-frame"><span>字</span><div className="art-lines"><i /><i /><i /></div><div className="art-play"><Icon name="play" size={23} /></div></div><span className="art-spark">✦</span></div>
@@ -118,17 +110,16 @@ export default function App() {
             </div>
           </section>
 
-          <aside className="learning-panel" aria-label="Learning tools">
-            <div className="panel-tabs" role="tablist" aria-label="Learning panel"><button id="transcript-tab" role="tab" aria-controls="learning-content" aria-selected={tab === 'transcript'} onClick={() => setTab('transcript')}><Icon name="captions" size={17} /> Transcript</button><button id="vocabulary-tab" role="tab" aria-controls="learning-content" aria-selected={tab === 'vocabulary'} onClick={() => setTab('vocabulary')}><Icon name="book" size={17} /> Vocabulary</button></div>
-            <div id="learning-content" role="tabpanel" aria-labelledby={`${tab}-tab`} className="panel-content">
-              <span className="panel-counter">{tab === 'transcript' ? 'SUBTITLES' : 'SAVED WORDS'}<span>—</span></span>
-              <div className="learning-empty"><span className="empty-tool-icon"><Icon name={tab === 'transcript' ? 'captions' : 'book'} size={28} /></span><h3>{tab === 'transcript' ? 'Every sentence, a small step.' : 'Build your own wordbook.'}</h3><p>{tab === 'transcript' ? 'Import a video, choose its Chinese subtitle region, and analyze it to create your transcript.' : 'Import and analyze a video, then select Chinese words to view definitions and save vocabulary.'}</p></div>
-            </div>
-            <div className="panel-footnote"><span className="status-dot" />{selected ? 'Video ready for local playback' : 'Import a video to begin'}</div>
-          </aside>
+          <aside className="learning-column"><section className="transcript-panel"><h2>Transcript</h2><p>Import a video to start learning.</p></section>{library}</aside>
         </div>}
+        <div id="import-zone" className="below-video-import"><DouyinImportPanel openToken={openImport} collapseToken={selected?.id} localBusy={uploading} onLocal={() => fileInput.current?.click()} onImported={(video, reused) => {
+          libraryRevision.current += 1;
+          setVideos((current) => [video, ...current.filter((item) => item.id !== video.id)]);
+          setSelected(video); setNotice(reused ? 'Opened the existing local copy. Cached analysis remains available.' : 'Douyin video imported into your local library.');
+        }} /></div>
         <StoragePanel />
         <footer className="workspace-footer"><span>Built for focused, everyday learning.</span><span>Local video · Chinese OCR · Mandarin · English / Vietnamese</span></footer>
+      </div>
       </main>
     </div>
   </div>;

@@ -1,5 +1,9 @@
 # Douyin Language Player — Phase 4
 
+**V2.1 UI / v2---Update-UI:** dedicated Vocabulary page with search/status filters/notes, one sun/moon theme switch, warmer light colors, import below the player, and transcript pinyin + Chinese + selected sentence translation with continuous reading highlight through gaps. See [changes, usage, validation and limits](docs/V2_1_UI_VALIDATION.md).
+
+**V2 UI / v2---Update-UI:** shared Paper Studio light and warm cinema dark themes, video-left / transcript-word-summary-library-right watch layout, ruby pinyin without visible transcript timestamps, expandable editing/dictionary tools and local-Mandarin pronunciation when a compatible OS/browser voice is installed. No Mandarin voice is currently available in the tested Edge installation; the button explains that limitation. See [layout, tests, usage and limitations](docs/V2_UI_VALIDATION.md).
+
 **v4.8 UI:** a quieter workspace with collapsed import/error/processing details, compact live OCR stages, on-demand help, simplified language controls and bounded mobile transcript scrolling. OCR, translation and data behavior stay unchanged; the backend API remains 0.4.7. See [UI changes, usage and validation](docs/V4_8_UI_VALIDATION.md).
 
 **v4.7 / OCR P1 improvements:** live stage/elapsed reporting during refinement, insertion/deletion merge fixes, direct Chinese→English or Chinese→Vietnamese sentence selection, separately labeled word meanings, Basic/Advanced OCR controls, hardware availability checks and local storage/explicit cache-history cleanup. The English model is installed locally; use `python scripts/setup_language_resources.py --translation-only --target en` for another installation. The OCR recognition model is unchanged and Fast showed no real-video skip benefit. See [validation, measurements, usage and remaining limits](docs/V4_7_VALIDATION.md).

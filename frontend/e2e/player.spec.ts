@@ -31,7 +31,7 @@ test('real MP4 import, decoding, playback, seek, speed, fullscreen, and persiste
   await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
-  await page.locator('h1').click();
+  await page.getByRole('heading', {name:'mandarin-test.mp4',exact:true}).click();
   await page.keyboard.press('ArrowLeft');
   await expect.poll(() => video.evaluate((media: HTMLVideoElement) => media.currentTime)).toBe(0);
   await page.keyboard.press('k');
@@ -60,8 +60,7 @@ test('invalid file rejection and responsive workspace', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Choose MP4 file').setInputFiles({ name: 'not-a-video.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not a video') });
   await expect(page.getByRole('alert')).toContainText('valid MP4 header');
-  await page.getByRole('tab', { name: 'Vocabulary' }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Vocabulary', exact: true })).toContainText('Save words');
+  await expect(page.getByRole('button', {name:'Saved words',exact:true})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
@@ -69,7 +68,7 @@ test('v4.5 deletion confirms, removes the selected library copy and survives rel
   await page.goto('/');
   await page.getByLabel('Choose MP4 file').setInputFiles(fixture);
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
-  await expect(page.locator('.phase-badge')).toContainText('v4.8');
+  await expect(page.locator('.phase-badge')).toContainText('V2.1 UI');
   page.once('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('button', { name: 'Delete selected video', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
@@ -79,4 +78,17 @@ test('v4.5 deletion confirms, removes the selected library copy and survives rel
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toHaveCount(0);
+});
+
+
+test('V2 saved vocabulary remains usable without any videos',async({page})=>{
+ await page.request.put('/api/vocabulary',{data:{word:'明天',status:'learning',notes:'Keep without video'}});
+ await page.goto('/');
+ await page.getByRole('button',{name:'Saved words',exact:true}).click();
+ await expect(page.getByLabel('Notes for 明天')).toHaveValue('Keep without video');
+ await page.getByRole('listitem').getByRole('button',{name:'View word 明天',exact:true}).click();
+ await expect(page.getByTestId('selected-word')).toContainText('tomorrow');
+ page.once('dialog',d=>d.accept());
+ await page.getByRole('button',{name:'Remove saved word',exact:true}).click();
+ await expect(page.getByLabel('Notes for 明天')).toHaveCount(0);
 });

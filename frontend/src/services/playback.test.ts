@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from './playback';
+import { activeSubtitle, transcriptSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from './playback';
 import { errorMessage } from './api';
 
 describe('playback helpers', () => {
@@ -38,4 +38,17 @@ describe('API error messages', () => {
     expect(errorMessage({ detail: [{ msg: 'Region is out of bounds' }] })).toBe('Region is out of bounds');
     expect(errorMessage(null)).toContain('backend');
   });
+});
+
+
+describe('transcript reading cursor',()=>{
+ it('holds the previous sentence through gaps while video captions disappear',()=>{
+  const segments=[{start_time:2,end_time:5},{start_time:6,end_time:9}];
+  expect(transcriptSubtitle(segments,1)).toBeUndefined();
+  expect(transcriptSubtitle(segments,5.5)).toBe(segments[0]);
+  expect(activeSubtitle(segments,5.5)).toBeUndefined();
+  expect(transcriptSubtitle(segments,6)).toBe(segments[1]);
+  expect(transcriptSubtitle(segments,10)).toBe(segments[1]);
+  expect(transcriptSubtitle(segments,3)).toBe(segments[0]);
+ });
 });

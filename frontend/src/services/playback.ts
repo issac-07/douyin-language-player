@@ -24,3 +24,8 @@ export function activeSubtitle<T extends TimedSegment>(segments: T[], currentTim
     return start <= currentTime && currentTime < end;
   });
 }
+
+// Transcript reading cursor intentionally holds through a gap; video captions use activeSubtitle.
+export function transcriptSubtitle<T extends {start_time:number}>(segments:T[], currentTime:number):T|undefined {
+ return segments.reduce<T|undefined>((latest,segment)=>segment.start_time<=currentTime && (!latest || segment.start_time>=latest.start_time)?segment:latest,undefined);
+}

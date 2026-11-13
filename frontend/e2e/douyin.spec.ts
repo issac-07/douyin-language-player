@@ -7,7 +7,7 @@ test('Douyin share text to the existing player, full learning workflow and dupli
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await page.getByRole('button', {name:'Import another video', exact:true}).click();
+  await page.getByRole('button', {name:'+ Add video', exact:true}).click();
   if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('分享中文 #学习 https://v.douyin.com/AbC123/ 复制链接打开抖音');
   await page.getByText('Import options & help', {exact:true}).click();
@@ -53,7 +53,7 @@ test('Douyin share text to the existing player, full learning workflow and dupli
 
 test('URL rejection, accurate HTTP 403 diagnostics, indeterminate progress, cancellation and local fallback', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', {name:'Import another video', exact:true}).click();
+  await page.getByRole('button', {name:'+ Add video', exact:true}).click();
   if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://tiktok.com/video/123');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
@@ -83,7 +83,7 @@ test('URL rejection, accurate HTTP 403 diagnostics, indeterminate progress, canc
 
 test('authentication and extractor compatibility have distinct errors', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', {name:'Import another video', exact:true}).click();
+  await page.getByRole('button', {name:'+ Add video', exact:true}).click();
   if (await page.getByRole('button', {name:'Import another video', exact:true}).count()) await page.getByRole('button', {name:'Import another video', exact:true}).click();
   await page.getByLabel('Douyin link or sharing text').fill('https://www.douyin.com/video/6961737553342991995');
   await page.getByRole('button', { name: 'Import link', exact: true }).click();
@@ -104,14 +104,14 @@ test('v4.8 import stays collapsed on failure/reload, preserves input and can hid
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
   const toggle = page.getByRole('button', {name:'Import another video', exact:true});
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', {name:'+ Add video',exact:true})).toBeVisible();
   await expect(page.getByLabel('Douyin link or sharing text')).toBeHidden();
-  await toggle.click();
+  await page.getByRole('button', {name:'+ Add video',exact:true}).click();
   const input = page.getByLabel('Douyin link or sharing text');
   const failing = 'https://www.douyin.com/video/6961737553342991999';
   await input.fill(failing);
   await page.getByRole('button', {name:'Hide import options', exact:true}).click();
-  await toggle.click();
+  await page.getByRole('button', {name:'+ Add video',exact:true}).click();
   await expect(input).toHaveValue(failing);
   await page.getByRole('button', {name:'Import link', exact:true}).click();
   const status = page.getByLabel('Douyin import status');
@@ -128,7 +128,7 @@ test('v4.8 import stays collapsed on failure/reload, preserves input and can hid
   await expect(status.getByText('Site returned HTTP 403', {exact:true})).toBeVisible();
   await status.getByText('View error details', {exact:true}).click();
   await expect(status.getByText('Site returned HTTP 403', {exact:true})).toBeHidden();
-  await toggle.click();
+  await page.getByRole('button', {name:'+ Add video',exact:true}).click();
   await input.fill('https://www.douyin.com/video/6961737553342991997');
   await page.getByRole('button', {name:'Import link', exact:true}).click();
   await expect(status).toContainText('Downloading');

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { DictionaryResult, SavedWord, WordToken } from '../types';
 
-export function DictionaryPanel({ selection, result, error, vocabulary, save }: {
-  selection: { word: string; pinyin: string } | null; result: DictionaryResult | null; error: string;
+export function DictionaryPanel({ selection, result, error, vocabulary, save, editable = true }: {
+  editable?: boolean; selection: { word: string; pinyin: string } | null; result: DictionaryResult | null; error: string;
   vocabulary: SavedWord[]; save: (word: string, status: SavedWord['status'], notes: string) => Promise<void>;
 }) {
   const existing = vocabulary.find((word) => word.word === selection?.word);
@@ -12,7 +12,7 @@ export function DictionaryPanel({ selection, result, error, vocabulary, save }: 
   const [busy, setBusy] = useState(false);
   useEffect(() => { setStatus(existing?.status ?? 'new'); setNotes(existing?.notes ?? ''); setMessage(''); }, [selection?.word]);
   return <details className="dictionary-details" open data-testid="dictionary-panel">
-    <summary>Dictionary <span>English · CC-CEDICT</span></summary>
+    <summary>Word details</summary>
     {!selection ? <p>Choose a Chinese word in the video or transcript to see its verified dictionary meanings here.</p> : <>
       <div className="dictionary-word" lang="zh">{selection.word}</div><p className="dictionary-pinyin" lang="zh-Latn">{selection.pinyin || result?.entries[0]?.pinyin}</p>
       {error && <p className="error-text" role="alert">{error}</p>}
@@ -22,7 +22,7 @@ export function DictionaryPanel({ selection, result, error, vocabulary, save }: 
       {result?.entries.map((entry, index) => <div className="dictionary-entry" key={index}><span lang="zh-Latn">{entry.pinyin}</span>{entry.traditional !== entry.simplified && <span lang="zh" className="dictionary-traditional">{entry.traditional}</span>}<ul>{entry.meanings.map((meaning, number) => <li key={number}>{meaning}</li>)}</ul></div>)}
       {result && !result.available && <p>The local dictionary is unavailable. Install the language resources described in the README and restart the backend.</p>}
       {result?.available && result.entries.length === 0 && <p>No CC-CEDICT entry was found for this exact word. You can still save the original word with your own notes.</p>}
-      <form onSubmit={async (event) => {
+      {editable && <form onSubmit={async (event) => {
         event.preventDefault(); setBusy(true); setMessage('');
         try { await save(selection.word, status, notes); setMessage('Vocabulary saved locally.'); }
         catch (cause) { setMessage((cause as Error).message); }
@@ -32,9 +32,9 @@ export function DictionaryPanel({ selection, result, error, vocabulary, save }: 
         <label className="sidebar-field">Personal notes<textarea aria-label="Vocabulary notes" rows={3} maxLength={5000} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
         <button className="primary-button" disabled={busy}>{busy ? 'Saving…' : existing ? 'Update saved word' : 'Save Vocabulary'}</button>
         {message && <p role="status">{message}</p>}
-      </form>
+      </form>}
     </>}
-    <p className="dictionary-attribution"><a href="https://www.mdbg.net/chinese/dictionary?page=cedict" target="_blank" rel="noreferrer">CC-CEDICT contributors / MDBG</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>. Verified definitions are English; optional Vietnamese word translations and English/Vietnamese sentence translations are machine-generated separately.</p>
+    <details className="dictionary-attribution"><summary>Data source & license</summary><p><a href="https://www.mdbg.net/chinese/dictionary?page=cedict" target="_blank" rel="noreferrer">CC-CEDICT contributors / MDBG</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>. Verified definitions are English; optional Vietnamese word translations and English/Vietnamese sentence translations are machine-generated separately.</p></details>
   </details>;
 }
 
