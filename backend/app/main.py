@@ -93,6 +93,7 @@ def create_app(settings: Settings | None = None, *, import_client_factory=None, 
 
     @app.get("/api/health")
     def health():
+        selected = app.state.learning.model_translators[app.state.learning.get_player_settings().translation_model]
         return {"status": "ok", "phase": 4, "version": "0.4.7", "ffprobe_available": shutil.which(settings.ffprobe) is not None,
                 "max_download_bytes": settings.max_download_bytes,
                 "ffmpeg_available": shutil.which(settings.ffmpeg) is not None,
@@ -100,7 +101,10 @@ def create_app(settings: Settings | None = None, *, import_client_factory=None, 
                 "ocr_available": app.state.worker.availability_error is None,
                 "ocr_error": app.state.worker.availability_error,
                 "dictionary_available": app.state.learning.dictionary.available,
-                "translation_available": app.state.learning.translator.available}
+                "translation_available": selected['vi'].available,
+                "translation_model": selected['vi'].identity,
+                "translation_targets": {target: {"available": translator.available, "model": translator.identity}
+                                        for target, translator in selected.items()}}
 
     return app
 

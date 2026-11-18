@@ -53,9 +53,9 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await expect(page.getByTestId('ocr-device')).toContainText('Fallback: none');
   const rows = page.getByTestId('subtitle-row');
   await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0)).toContainText('今天我们一起去吃饭');
-  await expect(rows.nth(1)).toContainText('你在干什么？');
-  await expect(rows.nth(2)).toContainText('我不知道发生了什么');
+  await expect(rows.nth(0)).toHaveAttribute('data-source-text', '今天我们一起去吃饭');
+  await expect(rows.nth(1)).toHaveAttribute('data-source-text', '你在干什么？');
+  await expect(rows.nth(2)).toHaveAttribute('data-source-text', '我不知道发生了什么');
   // Subtitle selection must still update when coarse timeupdate is suppressed.
   await page.getByRole('slider', { name: 'Seek video' }).fill('.3');
   await page.evaluate(async () => {
@@ -78,17 +78,19 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await page.getByRole('slider', { name: 'Seek video' }).fill('4');
   await expect.poll(async () => (await page.getByTestId('interactive-overlay').locator('[data-word-text], .subtitle-punctuation').allTextContents()).join('')).toBe('你在干什么？');
 
+  if ((await rows.first().locator('.row-tools').getAttribute('open')) === null) await rows.first().getByLabel('Subtitle tools', {exact:true}).click();
   await rows.first().getByRole('button', { name: 'Edit subtitle' }).click();
   await page.getByLabel('Subtitle text', { exact: true }).fill('今天我们一起去吃饭！');
   await page.getByLabel('Start (seconds)').fill('.75');
   await page.getByLabel('End (seconds)').fill('2.25');
   await page.getByRole('button', { name: 'Save subtitle', exact: true }).click();
-  await expect(rows.first()).toContainText('今天我们一起去吃饭！');
+  await expect(rows.first()).toHaveAttribute('data-source-text', '今天我们一起去吃饭！');
   await expect(rows.first()).toContainText('edited');
   await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await expect(page.getByText('Opened saved subtitles.')).toBeVisible();
   for (const format of ['JSON', 'SRT']) {
     const downloading = page.waitForEvent('download');
+    if ((await page.locator('.transcript-tools').getAttribute('open')) === null) await page.getByLabel('Transcript tools', {exact:true}).click();
     await page.getByRole('link', { name: `Export ${format}` }).click();
     const download = await downloading;
     const content = await readFile((await download.path())!, 'utf8');
@@ -97,12 +99,12 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   }
   await page.reload();
   await expect(rows).toHaveCount(3);
-  await expect(rows.first()).toContainText('今天我们一起去吃饭！');
+  await expect(rows.first()).toHaveAttribute('data-source-text', '今天我们一起去吃饭！');
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
   await page.getByRole('button', { name: 'Scan OCR again', exact: true }).click();
   await page.getByRole('button', { name: 'Cancel analysis', exact: true }).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status', 'cancelled');
-  await expect(rows.first()).toContainText('今天我们一起去吃饭！');
+  await expect(rows.first()).toHaveAttribute('data-source-text', '今天我们一起去吃饭！');
 
   // A second valid MP4 identity: trailing bytes preserve the original MP4 streams.
   await page.getByLabel('Choose MP4 file').setInputFiles({ name: 'second-video.mp4', mimeType: 'video/mp4', buffer: Buffer.concat([await readFile(fixture), Buffer.from('second-video-test')]) });
@@ -112,14 +114,15 @@ test('real OCR, visual ROI mapping, synchronization, edits, export, cancellation
   await page.getByRole('button', { name: 'Create / open subtitles', exact: true }).click();
   await page.locator('.recent-video').filter({ hasText: 'mandarin-test.mp4' }).click();
   await expect(page.getByRole('heading', { name: 'mandarin-test.mp4' })).toBeVisible();
-  await expect(rows.first()).toContainText('今天我们一起去吃饭！');
+  await expect(rows.first()).toHaveAttribute('data-source-text', '今天我们一起去吃饭！');
   const videos = await (await page.request.get('/api/videos')).json();
   const second = videos.find((video: { original_name: string }) => video.original_name === 'second-video.mp4');
-  await expect.poll(async () => (await (await page.request.get(`/api/videos/${second.id}/analyses/latest`)).json()).status, { timeout: 60_000 }).toBe('completed');
-  await expect(rows.first()).toContainText('今天我们一起去吃饭！');
+  await expect.poll(async () => (await (await page.request.get(`/api/videos/${second.id}/analyses/latest`)).json())?.status, { timeout: 60_000 }).toBe('completed');
+  await expect(rows.first()).toHaveAttribute('data-source-text', '今天我们一起去吃饭！');
   await page.locator('.recent-video').filter({ hasText: 'second-video.mp4' }).click();
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).not.toContainText('！');
+  if ((await rows.last().locator('.row-tools').getAttribute('open')) === null) await rows.last().getByLabel('Subtitle tools', {exact:true}).click();
   await rows.last().getByRole('button', { name: 'Delete subtitle' }).click();
   await expect(rows).toHaveCount(2);
   await page.getByRole('slider', { name: 'Seek video' }).fill('4');

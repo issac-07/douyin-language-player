@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSubtitle, clampSeek, formatTime, PLAYBACK_RATES } from './playback';
+import { activeSubtitle, transcriptSubtitle, subtitleMediaTime, clampSeek, formatTime, formatDuration, PLAYBACK_RATES } from './playback';
 import { errorMessage } from './api';
 
 describe('playback helpers', () => {
@@ -38,4 +38,37 @@ describe('API error messages', () => {
     expect(errorMessage({ detail: [{ msg: 'Region is out of bounds' }] })).toBe('Region is out of bounds');
     expect(errorMessage(null)).toContain('backend');
   });
+});
+
+
+describe('transcript reading cursor',()=>{
+ it('holds the previous sentence through gaps while video captions disappear',()=>{
+  const segments=[{start_time:2,end_time:5},{start_time:6,end_time:9}];
+  expect(transcriptSubtitle(segments,1)).toBeUndefined();
+  expect(transcriptSubtitle(segments,5.5)).toBe(segments[0]);
+  expect(activeSubtitle(segments,5.5)).toBeUndefined();
+  expect(transcriptSubtitle(segments,6)).toBe(segments[1]);
+  expect(transcriptSubtitle(segments,10)).toBe(segments[1]);
+  expect(transcriptSubtitle(segments,3)).toBe(segments[0]);
+ });
+});
+
+
+it('normalizes sub-microsecond media rounding without selecting a future video frame',()=>{
+ const segments=[{start_time:1.234567,end_time:2}];
+ const rounded=1.2345669999;
+ expect(transcriptSubtitle(segments,subtitleMediaTime(rounded,segments))).toBe(segments[0]);
+ expect(subtitleMediaTime(1.23,segments)).toBe(1.23);
+ expect(subtitleMediaTime(1.5,segments)).toBe(1.5);
+});
+
+describe('readable processing duration', () => {
+ it('uses minutes and seconds across boundaries', () => {
+  expect(formatDuration(330)).toBe('5m30s');
+  expect(formatDuration(300)).toBe('5m0s');
+  expect(formatDuration(59.9)).toBe('59s');
+  expect(formatDuration(60)).toBe('1m0s');
+  expect(formatDuration(3661)).toBe('1h1m1s');
+  expect(formatDuration(NaN)).toBe('0s');
+ });
 });

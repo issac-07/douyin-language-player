@@ -1,4 +1,78 @@
+## Translate near the selected sentence
+
+Changing language/model alone schedules uncached subtitle translations from the beginning. Clicking a transcript sentence or seeking the video prioritizes that sentence, then neighbouring subtitles (with a slight preference for upcoming lines), expanding outward. Clicking elsewhere reorders waiting work again. A running sentence finishes and is cached before the next priority is selected. Ordinary playback does not continuously reorder the queue.
+
+No OCR rerun, new model, prompt change or context/glossary change is involved. Cached results and manual corrections are retained, translation display order stays chronological, and pause/free-memory/idle unload remain available. This reduces waiting for the selected section; it does not guarantee higher total model throughput or zero loading/inference time.
+
+Model attribution appears once below the Transcript title rather than below every sentence. Manual translation details remain in each sentence's expandable tools; the heading notes when user edits are included.
+
+---
+
+## Translation memory controls
+
+Models unload automatically after **3 minutes with no running or queued translation**. Reading cached translations and polling status do not extend this timer. New uncached translation loads the selected model again; the first sentence will take longer.
+
+Use **Free model memory** beside the model picker to pause translation and release model RAM/GPU memory. If one sentence is running, the button shows **Releasing memory…** until that sentence finishes and its result is saved; queued sentences are skipped. Saved translations/manual corrections stay readable. **Resume translation** allows new translations again. Selecting another model or polling the page while paused does not reload weights. Pause is session-local and resets when the backend restarts. This does not delete models, video files, vocabulary or caches from SSD.
+
+The timeout can be changed before backend startup with `$env:DLP_TRANSLATION_IDLE_SECONDS='180'`. Normal backend shutdown stops the maintenance thread and managed model processes. Force-killing the backend/Windows crash is not a guaranteed graceful shutdown.
+
+---
+
+## Translation model picker
+
+Choose **Translation model** above the video:
+
+- **OPUS / Marian (original)**: the original small CPU translators.
+- **Hy-MT2 1.8B Q8**: the default local model.
+- **Hy-MT2 7B Q4_K_M**: the larger local translator (~4.62 GB model download).
+
+The choice is persisted with player settings. Changing it reuses existing Chinese OCR and translates with the selected model; no OCR rerun is required. Each model/target has independent machine-translation cache entries. Transcript translations display their actual model source. Manual corrections remain across model switches and are labelled **Edited by you**. Only one translation worker runs; switching to an uncached model unloads the previous model before loading the selected one. One currently running sentence may finish before switching; obsolete queued work is skipped. Cached results can display immediately without loading any model.
+
+Install the larger model explicitly (not from a playback request):
+
+```powershell
+.venv\Scripts\python.exe scripts/setup_hymt.py --model hymt-7b-q4km
+```
+
+Its pinned official revision and SHA-256 are in `backend/app/services/translation_models.py`. The installer verifies the model/runtime and writes the installation manifest only on success. Restart the backend after installation so availability updates. Files are stored under `data/resources/hy-mt2-7b-q4km/` and excluded from Git; the original 1.8B and Marian files are preserved. Model errors do not silently select another translator.
+
+Processing elapsed time and the video details duration use `5m30s` (or `1h5m30s`). The media seek clock and editable subtitle timestamps keep their conventional precise formats. The navigation content and page now share a centered 1800px maximum width and matching responsive side padding.
+
+---
+
+## Local translation update: Hy-MT2 Q8
+
+Sentence translation now defaults to **Tencent Hy-MT2-1.8B Q8_0**, directly Chinese→Vietnamese or Chinese→English. OCR, pinyin and CC-CEDICT English definitions are unchanged. Both targets share one lazily loaded llama.cpp process; switching languages does not load two copies. No translation API or subscription is needed.
+
+Install once on Windows x64 from the project directory:
+
+```powershell
+.venv\Scripts\python.exe scripts/setup_hymt.py
+scripts\start-backend.cmd
+scripts\start-frontend.cmd
+```
+
+The explicit installer downloads the official pinned GGUF (~1.91 GB) and llama.cpp Vulkan runtime (~38 MB archive), verifies SHA-256 before publishing the manifest, and saves them in `data/resources/hy-mt2-1.8b-q8/`. Files stay outside Git. Playback/API requests never download models. Model: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF (Apache-2.0). Runtime: https://github.com/ggml-org/llama.cpp (MIT; bundled notices retained).
+
+The backend starts/stops its private loopback-only, API-key-protected inference process automatically. Intel GPU acceleration uses Vulkan; actual device/layer offload is recorded in `data/resources/hy-mt2-1.8b-q8/inference.log`. To explicitly use CPU, set `$env:DLP_TRANSLATION_GPU_LAYERS='0'` before starting the backend. Model loading and each generation have 120-second limits; failures are displayed, without silently switching to the old translator.
+
+Restart an already running backend after installation. Open an existing video: Chinese OCR results are reused while translations regenerate using the new model identity. Existing machine translations are retained under their old cache keys; manual translations are preserved. Failed jobs can be retried from Transcript. The Local storage panel includes model space; repeated translation does not download another model. Existing Marian files are kept and selectable in the Translation model control.
+
+Translation remains sentence-based, with no neighbouring-sentence context or visual understanding. A new model cannot reliably fix incorrect OCR. Long input (>1,000 characters), empty output and token-truncated output report errors rather than silently saving incomplete text.
+
+---
+
 # Douyin Language Player — Phase 4
+
+**Language picker update:** a two-button English/Tiếng Việt switch with flags controls both sentence translations and selected-word meanings, including Vocabulary and empty-library views. Existing language choices follow the prior sentence language. See [behavior and validation](docs/LANGUAGE_PICKER_VALIDATION.md).
+
+**Display controls update:** equal-width word status buttons; independent transcript Pinyin/Translation toggles; Chinese/Pinyin/Translate controls beside a styled Delete button; distinct selected-word colors, themed scrollbars and a light/dark Subtitle appearance panel. See [usage and validation](docs/DISPLAY_CONTROLS_VALIDATION.md).
+
+**Word controls update:** three mutually exclusive New/Learning/Known buttons and a same-row Save/Saved toggle, with notes preserved on status changes and immediate unsave/resave. The speaker automatically uses Microsoft Xiaoxiao Online when exposed by the browser; no pronunciation/provider settings or model downloads. Paused transcript seeks remain synchronized. See [behavior, validation and limits](docs/WORD_CONTROLS_VALIDATION.md).
+
+**V2.1 UI / v2---Update-UI:** dedicated Vocabulary page with search/status filters/notes, one sun/moon theme switch, warmer light colors, import below the player, and transcript pinyin + Chinese + selected sentence translation with continuous reading highlight through gaps. See [changes, usage, validation and limits](docs/V2_1_UI_VALIDATION.md).
+
+**V2 UI / v2---Update-UI:** shared Paper Studio light and warm cinema dark themes, video-left / transcript-word-summary-library-right watch layout, ruby pinyin without visible transcript timestamps, expandable editing/dictionary tools and local-Mandarin pronunciation when a compatible OS/browser voice is installed. No Mandarin voice is currently available in the tested Edge installation; the button explains that limitation. See [layout, tests, usage and limitations](docs/V2_UI_VALIDATION.md).
 
 **v4.8 UI:** a quieter workspace with collapsed import/error/processing details, compact live OCR stages, on-demand help, simplified language controls and bounded mobile transcript scrolling. OCR, translation and data behavior stay unchanged; the backend API remains 0.4.7. See [UI changes, usage and validation](docs/V4_8_UI_VALIDATION.md).
 

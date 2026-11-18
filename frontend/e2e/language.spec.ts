@@ -7,6 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 async function openLanguageVideo(page: Page, filename: string) {
   await page.goto('/');
+  await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'Tiếng Việt',exact:true}).click();
   await page.getByLabel('Choose MP4 file').setInputFiles(path.join(root, 'data/fixtures', filename));
   await expect(page.getByRole('heading', { name: filename })).toBeVisible();
   await page.getByText('Subtitle analysis settings', { exact: true }).click();
@@ -46,6 +47,7 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   const video = page.locator('video');
   const sizeBefore = await page.locator('.video-stage').evaluate((element) => ({ width: element.clientWidth, height: element.clientHeight }));
   await overlay.getByRole('button', { name: 'Look up 今天', exact: true }).click();
+  await page.getByText('More', {exact:true}).click();
   const dictionary = page.getByTestId('dictionary-panel');
   await expect(dictionary).toContainText('today');
   expect(await video.evaluate((media: HTMLVideoElement) => media.paused)).toBe(false);
@@ -60,11 +62,12 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await page.getByLabel('Vocabulary notes', { exact: true }).fill('Learned while watching');
   await page.getByRole('button', { name: 'Save Vocabulary', exact: true }).click();
   await expect(page.getByText('Vocabulary saved locally.')).toBeVisible();
-  await page.getByRole('tab', { name: 'Vocabulary', exact: true }).click();
+  await page.getByRole('button', { name: 'Saved words', exact: true }).click();
   await expect(page.getByLabel('Status for 今天')).toHaveValue('learning');
   const downloading = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Export vocabulary CSV' }).click();
   expect(await readFile((await (await downloading).path())!, 'utf8')).toContain('Learned while watching');
+  await page.getByRole('button',{name:'← Back to video',exact:true}).click();
 
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
   const oldSize = await overlay.locator('.word-chinese').first().evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
@@ -102,7 +105,7 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await expect(overlay.getByTestId('word-pinyin').first()).toBeVisible();
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay');
   await page.getByRole('button', { name: 'Close subtitle settings' }).click();
-  await page.getByRole('tab', { name: 'Transcript', exact: true }).click();
+  await page.getByRole('heading', { name: 'Transcript', exact: true }).click();
   await page.getByTestId('subtitle-row').first().getByRole('button', { name: 'Look up 今天 from transcript' }).click();
   await expect(dictionary).toContainText('today');
   await page.getByRole('button', { name: 'Subtitle appearance', exact: true }).click();
@@ -133,9 +136,9 @@ test('in-video pinyin, Chinese and Vietnamese, right dictionary, vocabulary, set
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect.poll(() => video.evaluate((media: HTMLVideoElement) => media.paused)).toBe(true);
   expect(await video.evaluate((media: HTMLVideoElement) => media.currentTime)).toBeCloseTo(2.5, 1);
-  await page.getByRole('button', { name: 'Next subtitle', exact: true }).click();
+  await page.getByRole('slider', { name: 'Seek video', exact: true }).fill('3.2');
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('làm gì');
-  await page.getByRole('button', { name: 'Previous subtitle', exact: true }).click();
+  await page.getByRole('slider', { name: 'Seek video', exact: true }).fill('1');
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay');
   await page.getByRole('button', { name: 'Subtitle appearance', exact: true }).click();
   await page.getByRole('button', { name: 'Reset to Defaults' }).click();
@@ -151,8 +154,9 @@ test('landscape, mobile sidebar, manual translation and wordbook persistence', a
   await page.getByTestId('interactive-overlay').getByRole('button', { name: 'Look up 今天', exact: true }).click();
   await expect(page.getByTestId('dictionary-panel')).toContainText('today');
   await page.screenshot({ path: 'test-results/phase3-landscape.png', fullPage: true });
-  await page.getByRole('tab', { name: 'Transcript', exact: true }).click();
+  await page.getByRole('heading', { name: 'Transcript', exact: true }).click();
   const row = page.locator('.subtitle-row.active');
+  if ((await row.locator('.row-tools').getAttribute('open')) === null) await row.getByLabel('Subtitle tools', {exact:true}).click();
   await row.getByRole('button', { name: 'Edit Vietnamese translation' }).click();
   await page.getByLabel('Vietnamese sentence translation', { exact: true }).fill('Hôm nay chúng ta cùng đi ăn.');
   await page.getByRole('button', { name: 'Save translation', exact: true }).click();
@@ -160,20 +164,23 @@ test('landscape, mobile sidebar, manual translation and wordbook persistence', a
   await page.reload();
   await page.getByRole('slider', { name: 'Seek video' }).fill('1');
   await expect(page.getByTestId('subtitle-vietnamese')).toHaveText('Hôm nay chúng ta cùng đi ăn.');
-  await page.getByRole('tab', { name: 'Vocabulary', exact: true }).click();
+  await page.getByRole('button', { name: 'Saved words', exact: true }).click();
   await expect(page.getByLabel('Notes for 今天')).toHaveValue('Learned while watching');
+  await page.getByRole('button',{name:'← Back to video',exact:true}).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await checkBounds(page);
   await page.getByTestId('interactive-overlay').getByRole('button', { name: 'Look up 今天', exact: true }).click();
+  await page.getByText('More', {exact:true}).click();
   const dictionary = page.getByTestId('dictionary-panel');
   await expect(dictionary).toContainText('today');
   expect((await dictionary.boundingBox())!.y).toBeGreaterThanOrEqual((await page.locator('.player').boundingBox())!.y + (await page.locator('.player').boundingBox())!.height);
-  await dictionary.locator('summary').click();
+  await dictionary.locator(':scope > summary').click();
   expect(await dictionary.getAttribute('open')).toBeNull();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/phase3-mobile.png', fullPage: true });
-  await page.getByRole('tab', { name: 'Transcript', exact: true }).click();
+  await page.getByRole('heading', { name: 'Transcript', exact: true }).click();
+  if ((await page.locator('.subtitle-row.active').locator('.row-tools').getAttribute('open')) === null) await page.locator('.subtitle-row.active').getByLabel('Subtitle tools', {exact:true}).click();
   await page.locator('.subtitle-row.active').getByRole('button', { name: 'Edit subtitle', exact: true }).click();
   await page.getByLabel('Subtitle text', { exact: true }).fill('今天我们一起去吃饭，然后去公园看看美丽的风景。我们慢慢走。');
   await page.getByRole('button', { name: 'Save subtitle', exact: true }).click();
@@ -184,18 +191,25 @@ test('landscape, mobile sidebar, manual translation and wordbook persistence', a
 });
 
 
-test('v4.7 direct English, independent word language, presets and storage inventory', async ({ page }) => {
+test('unified English/Vietnamese sentence and word language, presets and storage inventory', async ({ page }) => {
   test.setTimeout(150_000);
   await openLanguageVideo(page, 'mandarin-test.mp4');
-  await page.getByLabel('Sentence translation language', { exact: true }).selectOption('en');
+  await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true}).click();
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/dinner|eat/i, {timeout: 60_000});
   await expect(page.getByTestId('subtitle-vietnamese')).toHaveAttribute('lang', 'en');
+  await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+  await expect(page.getByTestId('selected-word').locator('.summary-meaning > p')).toContainText('today');
+  await expect(page.getByRole('group',{name:'Translation language',exact:true})).toHaveCount(1);
+  await expect(page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button')).toHaveCount(2);
+  await expect(page.locator('#toolbar-languages select')).toHaveCount(0);
   await page.waitForTimeout(500);
+  const sharedSettings=await (await page.request.get('/api/player-settings')).json();
+  expect(sharedSettings.sentence_language).toBe('en');expect(sharedSettings.dictionary_language).toBe('en');
   await page.reload();
-  await expect(page.getByLabel('Sentence translation language', {exact:true})).toHaveValue('en');
+  await expect(page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.getByRole('slider', {name:'Seek video'}).fill('1');
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/dinner|eat/i);
-  await page.getByLabel('Word meaning language', {exact:true}).selectOption('vi');
+  await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'Tiếng Việt',exact:true}).click();
   await page.getByTestId('interactive-overlay').getByRole('button', {name:'Look up 今天', exact:true}).click();
   await expect(page.getByTestId('dictionary-panel')).toContainText('không phải định nghĩa CC-CEDICT');
   await expect(page.getByTestId('dictionary-panel')).toContainText('today');
@@ -214,8 +228,7 @@ test('v4.7 direct English, independent word language, presets and storage invent
   await page.getByRole('button', {name:'Check storage usage', exact:true}).click();
   await expect(page.getByText('dictionary_and_models:', {exact:false})).toBeVisible();
   await page.screenshot({path:'test-results/v47-language-storage.png', fullPage:true});
-  await page.getByLabel('Sentence translation language', {exact:true}).selectOption('vi');
-  await page.getByLabel('Word meaning language', {exact:true}).selectOption('en');
+  await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'Tiếng Việt',exact:true}).click();
   await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay', {timeout:45_000});
   await page.waitForTimeout(500);
 });
@@ -264,4 +277,386 @@ test('v4.8 OCR states keep diagnostics closed and cancellation reachable outside
   await page.goto('/');
   await page.getByRole('button',{name:'Cancel analysis',exact:true}).click();
   await expect(page.getByTestId('analysis-status')).toHaveAttribute('data-status','cancelled');
+});
+
+
+test('V2 themes, timestamp-free reading, word summary, More and right-column library', async ({page})=>{
+ test.setTimeout(120000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+ await expect(page.locator('.sidebar')).toHaveCount(0);
+ const transcript=page.locator('.transcript-panel');
+ await expect(transcript.locator('.segment-time')).toHaveCount(0);
+ await expect(transcript.locator('ruby rt').first()).not.toBeEmpty();
+ await expect(transcript.locator('.transcript-translation').first()).toBeHidden();
+ await page.getByTestId('subtitle-row').first().focus();await page.keyboard.press('Space');
+ expect(await page.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
+ await page.getByRole('slider',{name:'Seek video'}).fill('1');
+ const before=await page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime);
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+ const summary=page.getByTestId('selected-word');
+ await expect(summary.locator('.summary-meaning > p')).toContainText(/nay/i);
+ expect(await page.locator('video').evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeCloseTo(before,1);
+ await expect(summary.locator('.word-more')).not.toHaveAttribute('open');
+ await expect(page.getByTestId('dictionary-panel')).toBeHidden();
+ await summary.getByText('More',{exact:true}).click();
+ await expect(page.getByTestId('dictionary-panel')).toBeVisible();
+ await summary.getByText('More',{exact:true}).click();
+ const player=(await page.locator('.player').boundingBox())!,library=(await page.getByRole('region',{name:'Video library',exact:true}).boundingBox())!;
+ expect(library.x).toBeGreaterThan(player.x+player.width);
+ expect(library.y).toBeGreaterThan((await summary.boundingBox())!.y);
+ await page.getByRole('switch',{name:'Dark mode',exact:true}).click();
+ await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+ await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+ await page.getByRole('slider',{name:'Seek video'}).fill('1');
+ await page.waitForTimeout(500);
+ await page.screenshot({path:'test-results/v2-dark.png',fullPage:true});
+ await page.getByRole('switch',{name:'Dark mode',exact:true}).click();
+ await page.waitForTimeout(300);
+ await page.screenshot({path:'test-results/v2-light.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/v2-mobile.png',fullPage:true});
+ expect(errors).toEqual([]);
+});
+
+test('Xiaoxiao Online is automatic, missing voice is reported and word changes cancel speech', async({page})=>{
+ await page.addInitScript(()=>{
+   const synth=new EventTarget();let voices:object[]=[];
+   Object.defineProperty(window,'SpeechSynthesisUtterance',{value:class{ text:string;voice:any;lang='';rate=1;onstart:any;onend:any;onerror:any;constructor(text:string){this.text=text;}},configurable:true});
+   Object.assign(window,{ttsCalls:[],ttsCancels:0});
+   Object.assign(synth,{getVoices:()=>voices,cancel:()=>{(window as any).ttsCancels++;},speak:(u:SpeechSynthesisUtterance)=>{(window as any).ttsCalls.push({text:u.text,lang:u.lang,local:u.voice?.localService});u.onstart?.(new Event('start') as SpeechSynthesisEvent);setTimeout(()=>u.onend?.(new Event('end') as SpeechSynthesisEvent),20);}});
+   Object.defineProperty(window,'speechSynthesis',{value:synth,configurable:true});
+   (window as any).installTestVoice=()=>{voices=[{name:'Other Mandarin',lang:'zh-CN',localService:true},{name:'Microsoft 晓晓 Online (Natural)',lang:'zh-CN',localService:false}];synth.dispatchEvent(new Event('voiceschanged'));};
+ });
+ await page.goto('/');await page.getByRole('slider',{name:'Seek video'}).fill('1');
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+ await page.getByRole('button',{name:'Pronounce Chinese word',exact:true}).click();
+ await expect(page.getByTestId('selected-word')).toContainText('Microsoft Xiaoxiao Online is not available');
+ await page.evaluate(()=>(window as any).installTestVoice());
+ await page.getByRole('button',{name:'Pronounce Chinese word',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).ttsCalls)).toEqual([{text:'今天',lang:'zh-CN',local:false}]);
+ const cancels=await page.evaluate(()=>(window as any).ttsCancels);
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 我们',exact:true}).first().click();
+ expect(await page.evaluate(()=>(window as any).ttsCancels)).toBeGreaterThan(cancels);
+});
+
+
+test('V2.1 transcript gaps, translations, dedicated vocabulary and one theme switch', async ({page})=>{
+ test.setTimeout(120000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ const video=page.locator('video');
+ const seek=page.getByRole('slider',{name:'Seek video',exact:true});
+ const first=page.getByTestId('subtitle-row').first();
+ await expect(first.locator('.reading-translation')).toContainText('Hôm nay');
+ await expect(first.locator('rt').first()).toHaveText('jīn tiān');
+ expect(await first.locator('rt').first().evaluate(e=>getComputedStyle(e).fontFamily)).toContain('Segoe UI');
+ await seek.fill('2.7');
+ await expect(first).toHaveAttribute('aria-current','true');
+ await expect(page.getByTestId('interactive-overlay')).toHaveCount(0);
+ await seek.fill('3.2');
+ await expect(page.getByTestId('subtitle-row').nth(1)).toHaveAttribute('aria-current','true');
+ await seek.fill('1');
+ await expect(first).toHaveAttribute('aria-current','true');
+ await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true}).click();
+ await expect(first.locator('.reading-translation')).toHaveAttribute('lang','en');
+ await expect(first.locator('.reading-translation')).not.toContainText('Hôm nay');
+ await expect(first.locator('.reading-translation')).not.toHaveText('Translating…',{timeout:45000});
+ await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'Tiếng Việt',exact:true}).click();
+ const status=await page.getByTestId('analysis-status').boundingBox();
+ await expect(page.getByRole('button',{name:'Import another video',exact:true})).toBeVisible();
+ const importer=await page.locator('#import-zone').boundingBox();
+ const storage=await page.getByText('Local storage / Dung lượng lưu trữ',{exact:true}).boundingBox();
+ expect(importer!.y).toBeGreaterThan(status!.y+status!.height);
+ expect(storage!.y).toBeGreaterThan(importer!.y);
+ const theme=page.getByRole('switch',{name:'Dark mode',exact:true});
+ await theme.focus();await page.keyboard.press('Space');
+ await expect(theme).toHaveAttribute('aria-checked','true');
+ await page.reload();await expect(theme).toHaveAttribute('aria-checked','true');
+ await theme.click();
+ await seek.fill('1');
+ await page.getByRole('button',{name:'Play',exact:true}).click();
+ await page.getByRole('button',{name:'Saved words',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Vocabulary page',exact:true})).toBeVisible();
+ expect(await video.evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
+ const held=await video.evaluate((v:HTMLVideoElement)=>v.currentTime);
+ await expect(page.locator('.watch-surface')).toBeHidden();
+ await page.getByRole('heading',{name:'Your vocabulary',exact:true}).focus();
+ await page.keyboard.press('k');
+ expect(await video.evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
+ await page.getByRole('searchbox',{name:'Search vocabulary',exact:true}).fill('jin tian');
+ await expect(page.getByRole('button',{name:'View word 今天',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'View word 今天',exact:true}).click();
+ await page.getByLabel('Status for 今天').selectOption('known');
+ await page.getByLabel('Notes for 今天').fill('V2.1 saved note');
+ await page.getByRole('button',{name:'Save word changes',exact:true}).click();
+ await expect(page.getByText('Changes saved.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Known',exact:true}).click();
+ await expect(page.getByRole('button',{name:'View word 今天',exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/v21-vocabulary-light.png',fullPage:true});
+ await theme.click();
+ await page.screenshot({path:'test-results/v21-vocabulary-dark.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/v21-vocabulary-mobile.png',fullPage:true});
+ await page.getByRole('button',{name:'← Back to video',exact:true}).click();
+ await expect(page.locator('.watch-surface')).toBeVisible();
+ expect(await video.evaluate((v:HTMLVideoElement)=>v.currentTime)).toBeCloseTo(held,1);
+ expect(await video.evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
+ await page.getByRole('button',{name:'Saved words',exact:true}).click();
+ await page.getByRole('searchbox',{name:'Search vocabulary',exact:true}).fill('V2.1 saved note');
+ await expect(page.getByLabel('Notes for 今天')).toHaveValue('V2.1 saved note');
+ await page.goBack();
+ await expect(page.locator('.watch-surface')).toBeVisible();
+ await page.getByRole('button',{name:'Saved words',exact:true}).click();
+ await page.getByRole('button',{name:'+ Add video',exact:true}).click();
+ await expect(page.getByLabel('Douyin link or sharing text')).toBeVisible();
+ await expect(page.locator('#import-zone')).toBeInViewport();
+ const importBox=await page.locator('#import-zone').boundingBox();
+ expect(importBox!.y).toBeLessThan(await page.evaluate(()=>innerHeight));
+ await page.getByRole('button',{name:'Hide import options',exact:true}).click();
+});
+
+
+test('quick word states save explicitly, preserve notes, unsave and undo without More',async({page})=>{
+ test.setTimeout(120000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ await page.request.put('/api/vocabulary',{data:{word:'今天',status:'learning',notes:'Preserve this note'}});
+ await page.reload();
+ await page.getByRole('slider',{name:'Seek video',exact:true}).fill('1');
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+ const summary=page.getByTestId('selected-word');
+ const states=summary.getByRole('group',{name:'Word learning status',exact:true});
+ await expect(states.getByRole('button',{name:'Learning',exact:true})).toHaveAttribute('aria-pressed','true');
+ await states.getByRole('button',{name:'Known',exact:true}).click();
+ await summary.getByRole('button',{name:'Save changes',exact:true}).click();
+ await expect(summary.getByRole('button',{name:'Unsave word',exact:true})).toHaveText('Saved');
+ let words=await (await page.request.get('/api/vocabulary')).json();
+ expect(words.find((w:any)=>w.word==='今天')).toMatchObject({status:'known',notes:'Preserve this note'});
+ const savedColor=await summary.getByRole('button',{name:'Unsave word',exact:true}).evaluate(e=>getComputedStyle(e).backgroundColor);
+ await summary.getByRole('button',{name:'Unsave word',exact:true}).click();
+ const save=summary.getByRole('button',{name:'Save word',exact:true});
+ await expect(save).toHaveText('Save');
+ await expect(summary.getByText('Word saved.',{exact:true})).toHaveCount(0);
+ words=await (await page.request.get('/api/vocabulary')).json();expect(words.some((w:any)=>w.word==='今天')).toBe(false);
+ await save.click();
+ await expect(summary.getByRole('button',{name:'Unsave word',exact:true})).toHaveText('Saved');
+ words=await (await page.request.get('/api/vocabulary')).json();
+ expect(words.find((w:any)=>w.word==='今天')).toMatchObject({status:'known',notes:'Preserve this note'});
+ await summary.getByRole('button',{name:'Unsave word',exact:true}).click();
+ await page.reload();await page.getByRole('slider',{name:'Seek video',exact:true}).fill('1');
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+ await expect(states.getByRole('button',{pressed:true})).toHaveCount(0);await expect(save).toBeDisabled();
+ await states.getByRole('button',{name:'New',exact:true}).click();
+ words=await (await page.request.get('/api/vocabulary')).json();expect(words.some((w:any)=>w.word==='今天')).toBe(false);
+ await save.click();
+ await expect(summary.getByRole('button',{name:'Unsave word',exact:true})).toHaveText('Saved');
+ const statusBox=await states.boundingBox(),saveBox=await summary.getByRole('button',{name:'Unsave word',exact:true}).boundingBox();
+ expect(Math.abs(statusBox!.y-saveBox!.y)).toBeLessThan(8);expect(statusBox!.x).toBeLessThan(saveBox!.x);
+ await page.reload();await page.getByRole('slider',{name:'Seek video',exact:true}).fill('1');
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+ await expect(states.getByRole('button',{name:'New',exact:true})).toHaveAttribute('aria-pressed','true');
+ const second=page.getByTestId('subtitle-row').nth(1),first=page.getByTestId('subtitle-row').first();
+ for(let i=0;i<3;i++){
+  await second.focus();await page.keyboard.press('Enter');
+  await expect(second).toHaveAttribute('aria-current','true');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText('làm gì');
+  await expect.poll(()=>page.locator('video').evaluate((v:HTMLVideoElement)=>v.seeking)).toBe(false);
+  await expect(second).toHaveAttribute('aria-current','true');
+  await first.focus();await page.keyboard.press('Enter');
+  await expect(first).toHaveAttribute('aria-current','true');
+  await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay');
+ }
+ expect(await page.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
+ await page.screenshot({path:'test-results/quick-word-actions.png',fullPage:true});
+});
+
+test('automatic Xiaoxiao pronunciation errors remain recoverable without voice options',async({page})=>{
+ await page.addInitScript(()=>{
+  const synth=new EventTarget();
+  Object.defineProperty(window,'SpeechSynthesisUtterance',{value:class{text:string;voice:any;lang='';rate=1;onerror:any;constructor(text:string){this.text=text;}},configurable:true});
+  Object.assign(window,{onlineSpeechCalls:[]});
+  Object.assign(synth,{getVoices:()=>[{name:'Microsoft Xiaoxiao Online (Natural)',lang:'zh-CN',localService:false}],cancel:()=>{},speak:(u:SpeechSynthesisUtterance)=>{(window as any).onlineSpeechCalls.push(u.text);setTimeout(()=>u.onerror?.({error:'network'} as SpeechSynthesisErrorEvent),10);}});
+  Object.defineProperty(window,'speechSynthesis',{value:synth,configurable:true});
+ });
+ await page.goto('/');await page.getByRole('slider',{name:'Seek video',exact:true}).fill('1');
+ await page.getByTestId('interactive-overlay').getByRole('button',{name:'Look up 今天',exact:true}).click();
+ const summary=page.getByTestId('selected-word'),speaker=summary.getByRole('button',{name:'Pronounce Chinese word',exact:true});
+ await expect(speaker).toBeEnabled();
+ await expect(summary.getByText('Pronunciation options',{exact:true})).toHaveCount(0);
+ await expect(summary.getByRole('checkbox')).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).onlineSpeechCalls)).toEqual([]);
+ await speaker.click();
+ await expect(summary.getByText('Pronunciation failed. Please try again.',{exact:true})).toBeVisible();
+ await expect(speaker).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).onlineSpeechCalls)).toEqual(['今天']);
+ await speaker.click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).onlineSpeechCalls.length)).toBe(2);
+
+});
+
+
+test('independent transcript and video display toggles, equal status widths and themed settings',async({page})=>{
+ test.setTimeout(120000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ const transcript=page.locator('.transcript-panel'),overlay=page.getByTestId('interactive-overlay');
+ await overlay.getByRole('button',{name:'Look up 今天',exact:true}).click();
+ const widths=await page.locator('.quick-word-status button').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().width));
+ expect(widths).toHaveLength(3);expect(Math.max(...widths)-Math.min(...widths)).toBeLessThan(1);
+ await page.getByRole('button',{name:'Transcript pinyin',exact:true}).click();
+ await expect(transcript.locator('rt')).toHaveCount(0);
+ await expect(overlay.getByTestId('word-pinyin').first()).toBeVisible();
+ await page.getByRole('button',{name:'Transcript translation',exact:true}).click();
+ await expect(transcript.locator('.reading-translation')).toHaveCount(0);
+ await expect(overlay.getByTestId('subtitle-vietnamese')).toBeVisible();
+ await page.getByRole('button',{name:'Video Chinese',exact:true}).click();
+ await expect(overlay.locator('[data-word-text]')).toHaveCount(0);
+ await page.getByRole('button',{name:'Video pinyin',exact:true}).click();
+ await expect(overlay.getByTestId('word-pinyin')).toHaveCount(0);
+ await page.getByRole('button',{name:'Video translation',exact:true}).click();
+ await expect(overlay).toHaveCount(0);
+ for(const name of ['Video Chinese','Video pinyin','Video translation'])await page.getByRole('button',{name,exact:true}).click();
+ await expect(overlay.locator('[data-word-text]').first()).toBeVisible();
+ await expect(overlay.getByTestId('word-pinyin').first()).toBeVisible();
+ await expect(overlay.getByTestId('subtitle-vietnamese')).toBeVisible();
+ await page.getByRole('button',{name:'Show extracted subtitles',exact:true}).click();
+ await page.getByRole('button',{name:'Video Chinese',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Video pinyin',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(page.getByRole('button',{name:'Video translation',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(overlay.locator('[data-word-text]').first()).toBeVisible();
+ await expect(overlay.getByTestId('word-pinyin')).toHaveCount(0);
+ await page.getByRole('button',{name:'Video pinyin',exact:true}).click();
+ await page.getByRole('button',{name:'Video translation',exact:true}).click();
+ await page.getByRole('button',{name:'Subtitle appearance',exact:true}).click();
+ await expect(page.getByLabel('Show pinyin',{exact:true})).toBeChecked();
+ await expect(page.getByLabel('Show Chinese',{exact:true})).toBeChecked();
+ await expect(page.getByLabel('Show sentence translation',{exact:true})).toBeChecked();
+ await expect(page.getByText('Appearance saved',{exact:true})).toBeVisible();
+ await page.reload();await page.getByRole('slider',{name:'Seek video',exact:true}).fill('1');
+ await expect(page.getByRole('button',{name:'Transcript pinyin',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(page.getByRole('button',{name:'Transcript translation',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(overlay.getByTestId('word-pinyin').first()).toBeVisible();
+ await page.getByRole('button',{name:'Transcript pinyin',exact:true}).click();
+ await page.getByRole('button',{name:'Transcript translation',exact:true}).click();
+ await overlay.getByRole('button',{name:'Look up 今天',exact:true}).click();
+ const colors=await page.locator('.word-summary').evaluate(e=>({word:getComputedStyle(e).backgroundColor,transcript:getComputedStyle(document.querySelector('.transcript-panel')!).backgroundColor,track:getComputedStyle(document.querySelector('.transcript-content')!).scrollbarColor,page:getComputedStyle(document.documentElement).getPropertyValue('--page').trim()}));
+ expect(colors.word).not.toBe(colors.transcript);expect(colors.track).not.toBe('auto');
+ await page.getByRole('button',{name:'Subtitle appearance',exact:true}).click();
+ const menu=page.getByRole('region',{name:'Subtitle appearance settings',exact:true});
+ expect(await menu.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe(await transcript.evaluate(e=>getComputedStyle(e).backgroundColor));
+ await page.screenshot({path:'test-results/display-settings-light.png',fullPage:true});
+ await page.getByRole('switch',{name:'Dark mode',exact:true}).click();
+ await page.waitForTimeout(250);
+ expect(await menu.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe(await transcript.evaluate(e=>getComputedStyle(e).backgroundColor));
+ await page.screenshot({path:'test-results/display-settings-dark.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('button',{name:'Close subtitle settings',exact:true}).click();
+ const toggles=await page.getByRole('group',{name:'Video subtitle display',exact:true}).boundingBox(),deletion=await page.getByRole('button',{name:'Delete selected video',exact:true}).boundingBox();
+ expect(toggles!.x+toggles!.width).toBeLessThanOrEqual(deletion!.x);
+ expect(Math.abs((toggles!.y+toggles!.height/2)-(deletion!.y+deletion!.height/2))).toBeLessThan(2);
+ const mobileWidths=await page.locator('.quick-word-status button').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().width));
+ expect(Math.max(...mobileWidths)-Math.min(...mobileWidths)).toBeLessThan(1);
+ await page.screenshot({path:'test-results/display-controls-mobile.png',fullPage:true});
+});
+
+test('translation model selection, truthful source labels, cache reuse and centered header', async ({page})=>{
+ test.setTimeout(240_000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ const selector=page.getByLabel('Translation model',{exact:true});
+ await expect(selector.locator('option')).toHaveCount(3);
+ await expect(selector.locator('option[value="hymt-7b-q4km"]')).toBeEnabled();
+ const videos=await (await page.request.get('/api/videos')).json();
+ const video=videos.find((v:{original_name:string})=>v.original_name==='mandarin-test.mp4');
+ const subtitles=await (await page.request.get(`/api/videos/${video.id}/subtitles`)).json();
+ for(const [id,label] of [['marian','OPUS / Marian (original)'],['hymt-7b-q4km','Hy-MT2 7B Q4_K_M'],['hymt-1.8b-q8','Hy-MT2 1.8B Q8']]){
+  await selector.selectOption(id);
+  await expect(page.getByTestId('translation-source').first()).toHaveText(`Translated by ${label}`,{timeout:120_000});
+  await expect.poll(async()=> (await (await page.request.get('/api/player-settings')).json()).translation_model).toBe(id);
+  const result=await (await page.request.get(`/api/videos/${video.id}/learning?target=vi&model=${id}`)).json();
+  expect(result.translation_model).toBe(id);
+  expect(result.segments[0].translation.status).toBe('completed');
+  const current=await (await page.request.get(`/api/videos/${video.id}/subtitles`)).json();
+  expect(current.analysis.id).toBe(subtitles.analysis.id);
+  if(id==='hymt-7b-q4km'){
+   await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true}).click();
+   await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/eat|dinner/i,{timeout:120_000});
+   await expect(page.getByTestId('subtitle-vietnamese')).toHaveAttribute('lang','en');
+   await expect(page.getByTestId('translation-source').first()).toContainText('Hy-MT2 7B Q4_K_M');
+   await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'Tiếng Việt',exact:true}).click();
+  }
+ }
+ await selector.selectOption('hymt-7b-q4km');
+ await expect(page.getByTestId('translation-source').first()).toHaveText('Translated by Hy-MT2 7B Q4_K_M');
+ await page.waitForTimeout(500);
+ await page.reload();
+ await expect(selector).toHaveValue('hymt-7b-q4km');
+ await expect(page.getByTestId('translation-source').first()).toHaveText('Translated by Hy-MT2 7B Q4_K_M');
+ for(const width of [2560,1920,1000,390]){
+  await page.setViewportSize({width,height:1000});
+  const bounds=await page.evaluate(()=>{
+   const head=document.querySelector('.topbar-inner')!;
+   const main=document.querySelector('main')!;
+   const h=head.getBoundingClientRect(),m=main.getBoundingClientRect();
+   const hs=getComputedStyle(head),ms=getComputedStyle(main);
+   return {hl:h.left+parseFloat(hs.paddingLeft),ml:m.left+parseFloat(ms.paddingLeft),hr:h.right-parseFloat(hs.paddingRight),mr:m.right-parseFloat(ms.paddingRight),overflow:document.documentElement.scrollWidth>innerWidth};
+  });
+  expect(Math.abs(bounds.hl-bounds.ml)).toBeLessThan(1);
+  expect(Math.abs(bounds.hr-bounds.mr)).toBeLessThan(1);
+  expect(bounds.overflow).toBe(false);
+ }
+ await page.setViewportSize({width:1920,height:1080});
+ await page.screenshot({path:'test-results/model-selection-light.png',fullPage:true});
+ await page.getByRole('switch',{name:'Dark mode'}).click();
+ await page.screenshot({path:'test-results/model-selection-dark.png',fullPage:true});
+ // Retain the lightweight default for other tests using this shared test server.
+ await selector.selectOption('hymt-1.8b-q8');
+ await expect(page.getByTestId('translation-source').first()).toContainText('1.8B Q8');
+ await page.waitForTimeout(500);
+});
+
+test('free model memory pauses background translation, keeps cache and resumes',async({page})=>{
+ test.setTimeout(120_000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ await expect(page.getByRole('button',{name:'Free model memory',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Free model memory',exact:true}).click();
+ const resume=page.getByRole('button',{name:'Resume translation',exact:true});
+ await expect(resume).toBeEnabled({timeout:30_000});
+ await expect.poll(async()=>{
+  const result=await (await page.request.get('/api/translation-memory')).json();
+  return result.paused&&!result.model_loaded&&!result.release_pending;
+ }).toBe(true);
+ await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay');
+ await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true}).click();
+ await expect(page.getByTestId('subtitle-vietnamese')).toHaveText('Translation paused');
+ await page.waitForTimeout(2500);
+ expect((await (await page.request.get('/api/translation-memory')).json()).model_loaded).toBe(false);
+ await resume.click();
+ await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/eat|dinner/i,{timeout:45_000});
+ await expect(page.getByRole('button',{name:'Free model memory',exact:true})).toBeEnabled();
+ await page.screenshot({path:'test-results/model-memory-controls.png',fullPage:true});
+ await page.getByRole('button',{name:'Free model memory',exact:true}).click();
+ await expect(resume).toBeEnabled({timeout:30_000});
+});
+
+test('translation priority follows explicit seeks and source appears once below Transcript',async({page})=>{
+ test.setTimeout(120_000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ await expect(page.locator('.transcript-heading').getByTestId('translation-source')).toHaveCount(1);
+ await expect(page.locator('.subtitle-row').getByTestId('translation-source')).toHaveCount(0);
+ const rows=page.getByTestId('subtitle-row');
+ const focused=page.waitForRequest(request=>request.url().includes('/learning?')&&new URL(request.url()).searchParams.has('focus'));
+ await rows.last().focus();await rows.last().press('Enter');
+ const focusRequest=await focused;
+ expect(Number(new URL(focusRequest.url()).searchParams.get('focus'))).toBeGreaterThan(3);
+ const language=page.getByRole('group',{name:'Translation language',exact:true});
+ const fromBeginning=page.waitForRequest(request=>request.url().includes('/learning?')&&new URL(request.url()).searchParams.get('target')==='en'&&!new URL(request.url()).searchParams.has('focus'));
+ await language.getByRole('button',{name:'English',exact:true}).click();
+ await fromBeginning;
+ const seek=page.waitForRequest(request=>request.url().includes('/learning?')&&new URL(request.url()).searchParams.get('focus')==='1');
+ await page.getByRole('slider',{name:'Seek video'}).fill('1');await seek;
+ await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/eat|dinner/i,{timeout:45_000});
+ await expect(page.locator('.transcript-heading').getByTestId('translation-source')).toHaveText('Translated by Hy-MT2 1.8B Q8');
+ await page.screenshot({path:'test-results/priority-transcript.png',fullPage:true});
 });

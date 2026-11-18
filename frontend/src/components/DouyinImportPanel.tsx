@@ -19,7 +19,7 @@ const errorLabels: Record<string, string> = {
 };
 const operationLabels: Record<string, string> = { resolve_url: 'Resolve sharing link', extract_metadata: 'Extract metadata', download_media: 'Download media', validate_media: 'Validate media', import_library: 'Save to library' };
 
-export function DouyinImportPanel({ onImported, onLocal, localBusy, collapseToken }: { onImported: (video: Video, reused: boolean) => void; onLocal: () => void; localBusy: boolean; collapseToken?: string }) {
+export function DouyinImportPanel({ onImported, onLocal, localBusy, collapseToken, openToken }: { onImported: (video: Video, reused: boolean) => void; onLocal: () => void; localBusy: boolean; collapseToken?: string; openToken?:number }) {
   const [mode, setMode] = useState<'url' | 'local'>('url');
   const [text, setText] = useState('');
   const [analyze, setAnalyze] = useState(false);
@@ -28,7 +28,10 @@ export function DouyinImportPanel({ onImported, onLocal, localBusy, collapseToke
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => { setExpanded(false); }, [collapseToken]);
+  const previousVideo=useRef(collapseToken);
+  const optionsTouched=useRef(false);
+  useEffect(() => { if(previousVideo.current && previousVideo.current!==collapseToken)setExpanded(false);previousVideo.current=collapseToken; }, [collapseToken]);
+  useEffect(()=>{if(openToken){optionsTouched.current=true;setExpanded(true);}},[openToken]);
   const callback = useRef(onImported);
   const follow = useRef(false);
   const submission = useRef(false);
@@ -44,7 +47,7 @@ export function DouyinImportPanel({ onImported, onLocal, localBusy, collapseToke
     if (remembered) void api.urlImport(remembered, controller.signal).then((current) => {
       if (controller.signal.aborted || generation.current !== version) return;
       follow.current = !terminal(current); setJob(current);
-      setExpanded(false);
+      if(!optionsTouched.current)setExpanded(false);
     }).catch(() => { /* An isolated library or cleared job history can invalidate this ID. */ });
     return () => controller.abort();
   }, []);
@@ -85,7 +88,7 @@ export function DouyinImportPanel({ onImported, onLocal, localBusy, collapseToke
   };
 
   return <section className="import-panel" aria-label="Import video sources">
-    <button className="text-button import-options-toggle" aria-label={expanded ? 'Hide import options' : 'Import another video'} aria-expanded={expanded} aria-controls="import-options-content" onClick={() => setExpanded(!expanded)}>{expanded ? 'Hide import options' : 'Import another video'}</button>
+    <button className="text-button import-options-toggle" aria-label={expanded ? 'Hide import options' : 'Import another video'} aria-expanded={expanded} aria-controls="import-options-content" onClick={() => {optionsTouched.current=true;setExpanded(!expanded);}}>{expanded ? 'Hide import options' : 'Import another video'}</button>
     <div id="import-options-content" hidden={!expanded}>
     <div className="import-options" role="tablist" aria-label="Video import method">
       <button id="url-import-tab" role="tab" aria-selected={mode === 'url'} aria-controls="import-source-content" onClick={() => setMode('url')}>Import from Douyin URL</button>
