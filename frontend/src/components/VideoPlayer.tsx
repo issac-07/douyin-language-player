@@ -6,8 +6,8 @@ import { InteractiveSubtitleOverlay } from './InteractiveSubtitleOverlay';
 import { SubtitleAppearance } from './SubtitleAppearance';
 import { DEFAULT_PLAYER_SETTINGS } from '../hooks/usePlayerSettings';
 
-export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget, libraryActions, seekRequest }: {
-  seekRequest?:{time:number;nonce:number}|null; libraryActions?: ReactNode; video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void;
+export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, onSeek, learning, settings = DEFAULT_PLAYER_SETTINGS, updateSettings = () => {}, settingsStatus = '', roi = { x: .05, y: .6, width: .9, height: .3 }, onWord = () => {}, fullscreenTarget, libraryActions, seekRequest }: {
+  seekRequest?:{time:number;nonce:number}|null; libraryActions?: ReactNode; video: Video; segments?: SubtitleSegment[]; mediaRef?: RefObject<HTMLVideoElement | null>; onTimeChange?: (time: number) => void; onSeek?: (time:number)=>void;
   learning?: LearningDocument | null; settings?: PlayerSettings; updateSettings?: (settings: PlayerSettings) => void; settingsStatus?: string;
   roi?: ProcessingSettings['roi']; onWord?: (token: WordToken) => void; fullscreenTarget?: RefObject<HTMLDivElement | null>;
 }) {
@@ -134,7 +134,7 @@ export function VideoPlayer({ video, segments = [], mediaRef, onTimeChange, lear
         onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); setReady(true); }}
         onTimeUpdate={(event) => updateTime(event.currentTarget)}
         onSeeking={() => { seeking.current = true; previous.current=undefined; }}
-        onSeeked={(event) => { seeking.current = false; updateTime(event.currentTarget, false); }}
+        onSeeked={(event) => { onSeek?.(event.currentTarget.currentTime); seeking.current = false; updateTime(event.currentTarget, false); }}
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
         onVolumeChange={(event) => { setVolume(event.currentTarget.volume); setMuted(event.currentTarget.muted); }}
         onError={() => { setReady(false); setError('The browser could not load this video. Reimport if the file is missing; for an unsupported codec, convert a copy to H.264 video and AAC audio (see README).'); }}

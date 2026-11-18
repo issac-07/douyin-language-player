@@ -17,7 +17,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type TranslationMemory = {paused:boolean;release_pending:boolean;model_loaded:boolean;idle_seconds:number};
+
 export const api = {
+  translationMemory: () => request<TranslationMemory>('/api/translation-memory'),
+  releaseTranslationMemory: () => request<TranslationMemory>('/api/translation-memory/release', {method:'POST'}),
+  resumeTranslationMemory: () => request<TranslationMemory>('/api/translation-memory/resume', {method:'POST'}),
   translationModels: () => request<{id:TranslationModel;label:string;available:boolean}[]>('/api/translation-models'),
   ocrCapabilities: () => request<{openvino_cpu: boolean; intel_gpu: boolean; error: string | null}>("/api/ocr-capabilities"),
   storage: () => request<{ data_directory: string; groups: Record<string, {path: string; bytes: number}>; counts: Record<string, number>; reusable_database_bytes: number; videos: {id: string; name: string; bytes: number}[] }>('/api/storage'),
@@ -26,7 +31,7 @@ export const api = {
   importDouyin: (text: string, analyzeAfterImport: boolean, usePublicPage = false) => request<URLImportJob>('/api/imports/douyin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, analyze_after_import: analyzeAfterImport, use_public_page: usePublicPage }) }),
   urlImport: (id: string, signal?: AbortSignal) => request<URLImportJob>(`/api/imports/${id}`, { signal }),
   cancelImport: (id: string) => request<URLImportJob>(`/api/imports/${id}/cancel`, { method: 'POST' }),
-  learning: (id: string, signal?: AbortSignal, target = "vi", model = "hymt-1.8b-q8") => request<LearningDocument>(`/api/videos/${id}/learning?target=${target}&model=${model}`, { signal }),
+  learning: (id: string, signal?: AbortSignal, target = "vi", model = "hymt-1.8b-q8", focus?: number) => request<LearningDocument>(`/api/videos/${id}/learning?target=${target}&model=${model}${focus === undefined ? '' : `&focus=${focus}`}`, { signal }),
   retryLearning: (id: string, target = "vi", model = "hymt-1.8b-q8") => request<LearningDocument>(`/api/videos/${id}/learning/retry?target=${target}&model=${model}`, { method: 'POST' }),
   dictionary: (word: string, signal?: AbortSignal, target = "en", model?: string) => request<DictionaryResult>(`/api/dictionary?word=${encodeURIComponent(word)}&target=${target}${model ? `&model=${model}` : ''}`, { signal }),
   vocabulary: () => request<SavedWord[]>('/api/vocabulary'),

@@ -17,7 +17,11 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
   const [document, setDocument] = useState<SubtitleDocument | null>(null);
   const [job, setJob] = useState<AnalysisJob | null>(null);
   const [learning, setLearning] = useState<LearningDocument | null>(null);
-  useEffect(()=>setLearning(null),[appearance.settings.sentence_language, appearance.settings.translation_model]);
+  const scope = `${appearance.settings.sentence_language}:${appearance.settings.translation_model}`;
+  const [focus, setFocus] = useState<{scope:string;time:number}|null>(null);
+  const translationFocus = focus?.scope === scope ? focus.time : undefined;
+  const prioritizeTime = (time:number) => setFocus({scope,time});
+  useEffect(()=>{setLearning(null);setFocus(null);},[appearance.settings.sentence_language, appearance.settings.translation_model]);
   const [languageRetry, setLanguageRetry] = useState(0);
   const [dictionary, setDictionary] = useState<DictionaryResult | null>(null);
   const [selection, setSelection] = useState<{ word: string; pinyin: string; nonce: number } | null>(null);
@@ -97,7 +101,7 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const result = await api.learning(video.id, controller.signal, appearance.settings.sentence_language ?? "vi", appearance.settings.translation_model ?? "hymt-1.8b-q8");
+        const result = await api.learning(video.id, controller.signal, appearance.settings.sentence_language ?? "vi", appearance.settings.translation_model ?? "hymt-1.8b-q8", translationFocus);
         if (controller.signal.aborted || result.video_id !== video.id || result.analysis_id !== analysisId || result.target_language !== currentLanguage.current || result.translation_model !== currentModel.current) return;
         setLearning(result);
         if (result.segments.some((segment) => segment.translation.status === 'pending')) timer = setTimeout(poll, 700);
@@ -107,7 +111,7 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
     };
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [document?.analysis?.id, languageSignature, video.id, languageRetry, appearance.settings.sentence_language, appearance.settings.translation_model]);
+  }, [document?.analysis?.id, languageSignature, video.id, languageRetry, appearance.settings.sentence_language, appearance.settings.translation_model, translationFocus]);
 
   useEffect(()=>{let alive=true;api.vocabulary().then(words=>{if(alive)setVocabulary(words);}).catch(cause=>{if(alive)setError(cause.message);});return()=>{alive=false;};},[vocabularyRevision]);
   const selectWord = (token: WordToken) => {
@@ -134,7 +138,7 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
     };
     setDictionary(null); setDictionaryError(''); void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [selection?.nonce, appearance.settings.dictionary_language, appearance.settings.translation_model]);
+  }, [selection?.nonce, appearance.settings.dictionary_language, appearance.settings.translation_model, languageRetry]);
 
   const analyze = async (force: boolean) => {
     if (!settings || operation.current) return;
@@ -167,9 +171,9 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
 
   return <div className="workspace-grid learning-workspace" ref={workspace}>
     <section className="viewing-column" aria-label="Video workspace">
-      <TranslationModelSelector value={appearance.settings.translation_model ?? 'hymt-1.8b-q8'} onChange={translation_model=>appearance.update({...appearance.settings,translation_model})}/>
+      <TranslationModelSelector onResume={()=>setLanguageRetry(v=>v+1)} value={appearance.settings.translation_model ?? 'hymt-1.8b-q8'} onChange={translation_model=>appearance.update({...appearance.settings,translation_model})}/>
       <div className="language-progress" role="status">{learning?.segments.some(item => item.translation.status === 'pending') ? 'Preparing sentence translations…' : learning?.segments.some(item => ['failed', 'unavailable'].includes(item.translation.status)) ? 'Some translations are unavailable. See Transcript for details.' : ''}</div>
-      <VideoPlayer seekRequest={seekRequest} libraryActions={libraryActions} video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} learning={learning} settings={appearance.settings} updateSettings={appearance.update} settingsStatus={appearance.status} roi={document?.analysis?.settings.roi ?? settings?.roi} onWord={selectWord} fullscreenTarget={workspace} />
+      <VideoPlayer onSeek={prioritizeTime} seekRequest={seekRequest} libraryActions={libraryActions} video={video} segments={document?.segments ?? []} mediaRef={media} onTimeChange={setTime} learning={learning} settings={appearance.settings} updateSettings={appearance.update} settingsStatus={appearance.status} roi={document?.analysis?.settings.roi ?? settings?.roi} onWord={selectWord} fullscreenTarget={workspace} />
       <div className="video-details"><div><h2 title={video.original_name}>{video.title ?? video.original_name}</h2><details className="video-file-details"><summary>Video details</summary><p>{video.width} × {video.height} <span>·</span> {formatDuration(video.duration)} <span>·</span> {video.video_codec.toUpperCase()} {video.audio_codec && ` / ${video.audio_codec.toUpperCase()}`} <span>·</span> {(video.size_bytes / 1024 / 1024).toFixed(1)} MB</p></details>{video.source_url && <p>{video.uploader && `${video.uploader} · `}<a href={video.source_url} target="_blank" rel="noreferrer">Douyin source</a></p>}</div><span className="subtle-tag">{video.imported_from === 'douyin' ? 'Douyin · local copy' : 'Imported locally'}</span></div>
       {video.codec_warning && <p className="codec-warning" role="status">{video.codec_warning}</p>}
       <details className="processing-panel">
@@ -257,7 +261,7 @@ export function OCRWorkspace({ video, appearance, library, vocabularyRevision, l
       {error && <div className="compact-error" role="alert">Action could not be completed.<details key={error}><summary>View error details</summary><p>{error}</p></details></div>}
       <details className="keyboard-help"><summary>Keyboard shortcuts</summary><p><kbd>Space</kbd> / <kbd>K</kbd> play or pause <span>·</span> <kbd>←</kbd> <kbd>→</kbd> seek 5 seconds <span>·</span> <kbd>M</kbd> mute <span>·</span> <kbd>F</kbd> fullscreen. Focus the crop rectangle and use arrow keys to move it; Shift moves faster.</p></details>
     </section>
-    <Transcript library={library} document={document} currentTime={time} seek={seek} save={saveSegment} remove={removeSegment}
+    <Transcript library={library} document={document} currentTime={time} seek={value=>{prioritizeTime(value);seek(value);}} save={saveSegment} remove={removeSegment}
       learning={learning} onWord={selectWord} selection={selection} dictionary={dictionary} dictionaryError={dictionaryError}
       vocabulary={vocabulary} saveWord={async (word, status, notes) => {
         const saved = await api.saveWord(word, status, notes);

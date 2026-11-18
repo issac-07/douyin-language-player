@@ -615,3 +615,48 @@ test('translation model selection, truthful source labels, cache reuse and cente
  await expect(page.getByTestId('translation-source').first()).toContainText('1.8B Q8');
  await page.waitForTimeout(500);
 });
+
+test('free model memory pauses background translation, keeps cache and resumes',async({page})=>{
+ test.setTimeout(120_000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ await expect(page.getByRole('button',{name:'Free model memory',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Free model memory',exact:true}).click();
+ const resume=page.getByRole('button',{name:'Resume translation',exact:true});
+ await expect(resume).toBeEnabled({timeout:30_000});
+ await expect.poll(async()=>{
+  const result=await (await page.request.get('/api/translation-memory')).json();
+  return result.paused&&!result.model_loaded&&!result.release_pending;
+ }).toBe(true);
+ await expect(page.getByTestId('subtitle-vietnamese')).toContainText('Hôm nay');
+ await page.getByRole('group',{name:'Translation language',exact:true}).getByRole('button',{name:'English',exact:true}).click();
+ await expect(page.getByTestId('subtitle-vietnamese')).toHaveText('Translation paused');
+ await page.waitForTimeout(2500);
+ expect((await (await page.request.get('/api/translation-memory')).json()).model_loaded).toBe(false);
+ await resume.click();
+ await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/eat|dinner/i,{timeout:45_000});
+ await expect(page.getByRole('button',{name:'Free model memory',exact:true})).toBeEnabled();
+ await page.screenshot({path:'test-results/model-memory-controls.png',fullPage:true});
+ await page.getByRole('button',{name:'Free model memory',exact:true}).click();
+ await expect(resume).toBeEnabled({timeout:30_000});
+});
+
+test('translation priority follows explicit seeks and source appears once below Transcript',async({page})=>{
+ test.setTimeout(120_000);
+ await openLanguageVideo(page,'mandarin-test.mp4');
+ await expect(page.locator('.transcript-heading').getByTestId('translation-source')).toHaveCount(1);
+ await expect(page.locator('.subtitle-row').getByTestId('translation-source')).toHaveCount(0);
+ const rows=page.getByTestId('subtitle-row');
+ const focused=page.waitForRequest(request=>request.url().includes('/learning?')&&new URL(request.url()).searchParams.has('focus'));
+ await rows.last().focus();await rows.last().press('Enter');
+ const focusRequest=await focused;
+ expect(Number(new URL(focusRequest.url()).searchParams.get('focus'))).toBeGreaterThan(3);
+ const language=page.getByRole('group',{name:'Translation language',exact:true});
+ const fromBeginning=page.waitForRequest(request=>request.url().includes('/learning?')&&new URL(request.url()).searchParams.get('target')==='en'&&!new URL(request.url()).searchParams.has('focus'));
+ await language.getByRole('button',{name:'English',exact:true}).click();
+ await fromBeginning;
+ const seek=page.waitForRequest(request=>request.url().includes('/learning?')&&new URL(request.url()).searchParams.get('focus')==='1');
+ await page.getByRole('slider',{name:'Seek video'}).fill('1');await seek;
+ await expect(page.getByTestId('subtitle-vietnamese')).toContainText(/eat|dinner/i,{timeout:45_000});
+ await expect(page.locator('.transcript-heading').getByTestId('translation-source')).toHaveText('Translated by Hy-MT2 1.8B Q8');
+ await page.screenshot({path:'test-results/priority-transcript.png',fullPage:true});
+});

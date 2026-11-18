@@ -13,7 +13,7 @@ export function WordSummary({selection,result,error,vocabulary,save,remove,edita
  useEffect(()=>()=>{generation.current++;if(timer.current)clearTimeout(timer.current);window.speechSynthesis?.cancel();},[]);
  useEffect(()=>{generation.current++;if(timer.current)clearTimeout(timer.current);window.speechSynthesis?.cancel();setSpeaking(false);setMessage('');},[selection?.word,selection?.nonce]);
  const existing=vocabulary.find(w=>w.word===selection?.word);
- const meaning=result?.translation ? result.translation.text ?? (result.translation.status==='pending'?'Translating…':'Translation unavailable') : result?.entries[0]?.meanings[0] ?? (result?'No exact dictionary entry':'Looking up…');
+ const meaning=result?.translation ? result.translation.text ?? (result.translation.status==='pending'?'Translating…':result.translation.status==='paused'?'Translation paused':'Translation unavailable') : result?.entries[0]?.meanings[0] ?? (result?'No exact dictionary entry':'Looking up…');
  const speak=async()=>{
    if (!selection || speaking) return;
    const token=++generation.current;

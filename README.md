@@ -1,3 +1,23 @@
+## Translate near the selected sentence
+
+Changing language/model alone schedules uncached subtitle translations from the beginning. Clicking a transcript sentence or seeking the video prioritizes that sentence, then neighbouring subtitles (with a slight preference for upcoming lines), expanding outward. Clicking elsewhere reorders waiting work again. A running sentence finishes and is cached before the next priority is selected. Ordinary playback does not continuously reorder the queue.
+
+No OCR rerun, new model, prompt change or context/glossary change is involved. Cached results and manual corrections are retained, translation display order stays chronological, and pause/free-memory/idle unload remain available. This reduces waiting for the selected section; it does not guarantee higher total model throughput or zero loading/inference time.
+
+Model attribution appears once below the Transcript title rather than below every sentence. Manual translation details remain in each sentence's expandable tools; the heading notes when user edits are included.
+
+---
+
+## Translation memory controls
+
+Models unload automatically after **3 minutes with no running or queued translation**. Reading cached translations and polling status do not extend this timer. New uncached translation loads the selected model again; the first sentence will take longer.
+
+Use **Free model memory** beside the model picker to pause translation and release model RAM/GPU memory. If one sentence is running, the button shows **Releasing memory…** until that sentence finishes and its result is saved; queued sentences are skipped. Saved translations/manual corrections stay readable. **Resume translation** allows new translations again. Selecting another model or polling the page while paused does not reload weights. Pause is session-local and resets when the backend restarts. This does not delete models, video files, vocabulary or caches from SSD.
+
+The timeout can be changed before backend startup with `$env:DLP_TRANSLATION_IDLE_SECONDS='180'`. Normal backend shutdown stops the maintenance thread and managed model processes. Force-killing the backend/Windows crash is not a guaranteed graceful shutdown.
+
+---
+
 ## Translation model picker
 
 Choose **Translation model** above the video:

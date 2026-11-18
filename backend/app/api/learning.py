@@ -11,6 +11,21 @@ from app.models.learning import TranslationModel, DictionaryResult, LearningDocu
 router = APIRouter(prefix='/api', tags=['language learning'])
 
 
+@router.get('/translation-memory')
+def translation_memory(request: Request):
+    return request.app.state.learning.memory_status()
+
+
+@router.post('/translation-memory/release', status_code=202)
+def release_translation_memory(request: Request):
+    return request.app.state.learning.release_memory()
+
+
+@router.post('/translation-memory/resume')
+def resume_translation_memory(request: Request):
+    return request.app.state.learning.resume_translation()
+
+
 @router.get('/translation-models')
 def translation_models(request: Request):
     from app.services.translation_models import MODELS
@@ -18,9 +33,9 @@ def translation_models(request: Request):
 
 
 @router.get('/videos/{video_id}/learning', response_model=LearningDocument)
-def learning(request: Request, video_id: UUID, target: Literal["vi", "en"] | None = None, model: TranslationModel | None = None):
+def learning(request: Request, video_id: UUID, target: Literal["vi", "en"] | None = None, model: TranslationModel | None = None, focus: float | None = Query(default=None, ge=0, allow_inf_nan=False)):
     require_video(request, video_id)
-    return request.app.state.learning.document(request.app.state.repository.document(video_id), target, model)
+    return request.app.state.learning.document(request.app.state.repository.document(video_id), target, model, focus)
 
 
 @router.post('/videos/{video_id}/learning/retry', response_model=LearningDocument)

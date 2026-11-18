@@ -12,7 +12,7 @@ class WordToken(BaseModel):
 
 
 class Translation(BaseModel):
-    status: Literal['pending', 'completed', 'failed', 'unavailable', 'manual']
+    status: Literal['pending', 'completed', 'failed', 'unavailable', 'manual', 'paused']
     text: str | None = None
     model: str | None = None
     error: str | None = None

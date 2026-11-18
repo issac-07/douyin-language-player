@@ -93,7 +93,7 @@ export interface SubtitleDocument {
 }
 
 export interface WordToken { text: string; start: number; end: number; pinyin: string; selectable: boolean }
-export interface Translation { target_language?: "en" | "vi"; status: 'pending' | 'completed' | 'failed' | 'unavailable' | 'manual'; text: string | null; model: string | null; error: string | null; seconds: number | null }
+export interface Translation { target_language?: "en" | "vi"; status: 'pending' | 'completed' | 'failed' | 'unavailable' | 'manual' | 'paused'; text: string | null; model: string | null; error: string | null; seconds: number | null }
 export interface LearningSegment { id: string; revision: number; text: string; tokens: WordToken[]; translation: Translation }
 export interface LearningDocument { translation_model?: TranslationModel; model_label?: string; target_language?: "en" | "vi"; video_id: string; analysis_id: string | null; segments: LearningSegment[]; dictionary_available: boolean }
 export interface DictionaryEntry { traditional: string; simplified: string; pinyin: string; meanings: string[] }
